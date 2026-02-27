@@ -568,15 +568,15 @@ class SQLiteProcessor:
 
             parent_rows = conn.execute(
                 """
-                SELECT s.*, p.worktree as project_path, p.name as project_name
+                SELECT s.*, p.worktree as project_path, p.name as project_name,
+                       MAX(m.time_created) as last_parent_message_time
                 FROM session s
                 LEFT JOIN project p ON s.project_id = p.id
+                JOIN message m ON m.session_id = s.id
                 WHERE s.parent_id IS NULL
-                AND EXISTS (
-                    SELECT 1 FROM message m
-                    WHERE m.session_id = s.id AND m.time_created > ?
-                )
-                ORDER BY s.time_created DESC
+                GROUP BY s.id
+                HAVING last_parent_message_time > ?
+                ORDER BY last_parent_message_time DESC
                 LIMIT 10
             """,
                 (threshold_ms,),
