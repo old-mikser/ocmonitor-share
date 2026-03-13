@@ -14,11 +14,12 @@ Welcome to the complete documentation for OpenCode Monitor, a powerful CLI tool 
 4. [Configuration](#configuration)
 5. [Adding New Models](#adding-new-models)
 6. [Remote Pricing Fallback](#remote-pricing-fallback)
-7. [Setting Usage Quotas](#setting-usage-quotas)
-8. [Exporting Reports](#exporting-reports)
-9. [Configuration Commands](#configuration-commands)
-10. [Troubleshooting](#troubleshooting)
-11. [Advanced Tips](#advanced-tips)
+7. [Prometheus Metrics](#prometheus-metrics)
+8. [Setting Usage Quotas](#setting-usage-quotas)
+9. [Exporting Reports](#exporting-reports)
+10. [Configuration Commands](#configuration-commands)
+11. [Troubleshooting](#troubleshooting)
+12. [Advanced Tips](#advanced-tips)
 
 ---
 
@@ -509,6 +510,41 @@ ocmonitor live ~/.local/share/opencode/storage/message --refresh 10
 
 *Click image to view full-size screenshot of the live monitoring dashboard*
 
+### 5. Metrics Commands
+
+#### `ocmonitor metrics [--port] [--host]`
+Start a Prometheus metrics server for Grafana/Prometheus integration.
+
+```bash
+# Start metrics server (default port 9090)
+ocmonitor metrics
+
+# Custom port
+ocmonitor metrics --port 8080
+
+# Custom host
+ocmonitor metrics --host 127.0.0.1
+
+# Scrape metrics
+curl http://localhost:9090/metrics
+```
+
+**Features:**
+- 📊 **Prometheus Format** - Exposes metrics in Prometheus exposition format
+- 🔄 **Real-time Data** - Fresh session data loaded on each scrape
+- 🏷️ **Labeled Metrics** - Per-model and per-project labels for granular queries
+- ⚙️ **Configurable** - Custom host and port via CLI flags or config
+
+**Metrics Exposed:**
+- `ocmonitor_tokens_input_total{model}` - Input tokens per model
+- `ocmonitor_tokens_output_total{model}` - Output tokens per model
+- `ocmonitor_cost_dollars_total{model}` - Total cost per model
+- `ocmonitor_sessions_total{model}` - Session count per model
+- `ocmonitor_session_duration_hours_total` - Total session duration
+- `ocmonitor_sessions_by_project{project}` - Sessions by project
+
+**Note:** Requires `prometheus_client>=0.17.0`. Install with `pip install prometheus_client>=0.17.0`
+
 ---
 
 ## ⚙️ Configuration
@@ -637,6 +673,11 @@ daily_limits = { claude-sonnet-4 = 10.0, claude-opus-4 = 20.0 }
 monthly_limits = { claude-sonnet-4 = 200.0, claude-opus-4 = 400.0 }
 # Enable quota warnings
 enable_warnings = true
+
+[metrics]
+# Prometheus metrics server configuration
+port = 9090
+host = "0.0.0.0"
 ```
 
 ---
@@ -932,8 +973,172 @@ User overrides have **highest priority** and will overwrite any local or remote 
     "sessionQuota": 0.0,
     "description": "GPT-4o"
   }
+  }
 }
+
+---
+
+## 📊 Prometheus Metrics
+
+OpenCode Monitor now includes a Prometheus metrics endpoint, allowing you to scrape session analytics into Prometheus and visualize them in Grafana.
+
+### What is Prometheus Metrics?
+
+Prometheus is an open-source monitoring system that collects metrics from configured targets. The `ocmonitor metrics` command starts a lightweight HTTP server that exposes session analytics in Prometheus exposition format, enabling real-time monitoring and alerting.
+
+### Starting the Metrics Server
+
+```bash
+# Start metrics server with default settings (port 9090)
+ocmonitor metrics
+
+# Custom port
+ocmonitor metrics --port 8080
+
+# Custom host and port
+ocmonitor metrics --host 127.0.0.1 --port 9090
 ```
+
+**Startup Banner:**
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  📊 OpenCode Monitor Metrics Server
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🌐 Endpoint: http://0.0.0.0:9090/metrics
+
+Press Ctrl+C to stop
+```
+
+### Metrics Exposed
+
+All metrics are exposed at `http://localhost:9090/metrics` (or your configured host/port):
+
+| Metric Name | Type | Labels | Description |
+|-------------|------|--------|-------------|
+| `ocmonitor_tokens_input_total` | Gauge | `model` | Total input tokens |
+| `ocmonitor_tokens_output_total` | Gauge | `model` | Total output tokens |
+| `ocmonitor_tokens_cache_read_total` | Gauge | `model` | Total cache read tokens |
+| `ocmonitor_tokens_cache_write_total` | Gauge | `model` | Total cache write tokens |
+| `ocmonitor_cost_dollars_total` | Gauge | `model` | Total cost in USD |
+| `ocmonitor_sessions_total` | Gauge | `model` | Total number of sessions |
+| `ocmonitor_interactions_total` | Gauge | `model` | Total number of interactions |
+| `ocmonitor_output_rate_tokens_per_second` | Gauge | `model` | P50 output rate (tok/s) |
+| `ocmonitor_session_duration_hours_total` | Gauge | _(none)_ | Total session duration across all models |
+| `ocmonitor_sessions_by_project` | Gauge | `project` | Sessions grouped by project |
+
+### Scraping Metrics
+
+**Using curl:**
+```bash
+curl http://localhost:9090/metrics
+```
+
+**Sample output:**
+```
+# HELP ocmonitor_tokens_input_total Total input tokens
+# TYPE ocmonitor_tokens_input_total gauge
+ocmonitor_tokens_input_total{model="claude-sonnet-4-20250514"} 2451320.0
+ocmonitor_tokens_input_total{model="claude-opus-4"} 892340.0
+
+# HELP ocmonitor_cost_dollars_total Total cost in USD
+# TYPE ocmonitor_cost_dollars_total gauge
+ocmonitor_cost_dollars_total{model="claude-sonnet-4-20250514"} 47.23
+ocmonitor_cost_dollars_total{model="claude-opus-4"} 89.45
+
+# HELP ocmonitor_session_duration_hours_total Total session duration in hours
+# TYPE ocmonitor_session_duration_hours_total gauge
+ocmonitor_session_duration_hours_total 142.5
+```
+
+### Prometheus Configuration
+
+Add ocmonitor to your `prometheus.yml`:
+
+```yaml
+scrape_configs:
+  - job_name: 'ocmonitor'
+    static_configs:
+      - targets: ['localhost:9090']
+    scrape_interval: 30s
+```
+
+### Grafana Dashboard
+
+Create a simple Grafana dashboard with PromQL queries:
+
+**Total Cost by Model:**
+```promql
+ocmonitor_cost_dollars_total
+```
+
+**Total Tokens Over Time:**
+```promql
+sum(ocmonitor_tokens_input_total) + sum(ocmonitor_tokens_output_total)
+```
+
+**Sessions by Project:**
+```promql
+ocmonitor_sessions_by_project
+```
+
+### Configuration
+
+Add to `~/.config/ocmonitor/config.toml`:
+
+```toml
+[metrics]
+port = 9090
+host = "0.0.0.0"
+```
+
+**Environment Variables:**
+```bash
+export OCMONITOR_METRICS_PORT=9090
+export OCMONITOR_METRICS_HOST=0.0.0.0
+```
+
+### How It Works
+
+The metrics server uses Prometheus's **Custom Collector** pattern:
+
+1. **On each scrape**, the `collect()` method is called
+2. **Fresh data is loaded** from the SQLite database
+3. **Metrics are computed** using the existing SessionAnalyzer
+4. **GaugeMetricFamily objects** are yielded with current values
+
+This design ensures:
+- ✅ No background threads or polling
+- ✅ Prometheus controls data freshness via scrape interval
+- ✅ Always reflects the latest session data
+- ✅ Graceful degradation on errors (returns zero-valued metrics)
+
+### Dependencies
+
+The metrics feature requires `prometheus_client`:
+
+```bash
+# Install with metrics support
+pip install "ocmonitor[metrics]"
+
+# Or manually
+pip install prometheus_client>=0.17.0
+```
+
+### Troubleshooting
+
+**Port already in use:**
+```bash
+ocmonitor metrics --port 8080  # Use a different port
+```
+
+**Missing dependency:**
+```bash
+pip install prometheus_client>=0.17.0
+```
+
+**Graceful shutdown:**
+Press `Ctrl+C` to stop the server cleanly.
 
 ---
 

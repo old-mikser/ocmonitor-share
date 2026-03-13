@@ -82,6 +82,12 @@ class AnalyticsConfig(BaseModel):
     recent_sessions_limit: int = Field(default=50, ge=1, le=1000)
 
 
+class MetricsConfig(BaseModel):
+    """Configuration for Prometheus metrics server."""
+    port: int = Field(default=9090, ge=1024, le=65535)
+    host: str = Field(default="0.0.0.0")
+
+
 class Config(BaseModel):
     """Main configuration class."""
     paths: PathsConfig = Field(default_factory=PathsConfig)
@@ -89,6 +95,7 @@ class Config(BaseModel):
     export: ExportConfig = Field(default_factory=ExportConfig)
     models: ModelsConfig = Field(default_factory=ModelsConfig)
     analytics: AnalyticsConfig = Field(default_factory=AnalyticsConfig)
+    metrics: MetricsConfig = Field(default_factory=MetricsConfig)
 
 
 class ModelPricing(BaseModel):

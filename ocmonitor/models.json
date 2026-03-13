@@ -233,7 +233,30 @@
     "contextWindow": 400000,
     "sessionQuota": 0.0
   },
-
+  "gpt-5.2-codex": {
+    "input": 1.75,
+    "output": 14.0,
+    "cacheWrite": 0.0,
+    "cacheRead": 0.175,
+    "contextWindow": 400000,
+    "sessionQuota": 0.0
+  },
+  "gpt-5.4": {
+    "input": 2.5,
+    "output": 15.0,
+    "cacheWrite": 0.0,
+    "cacheRead": 0.25,
+    "contextWindow": 1000000,
+    "sessionQuota": 0.0
+  },
+  "gpt-5.4-pro": {
+    "input": 30.0,
+    "output": 180.0,
+    "cacheWrite": 0.0,
+    "cacheRead": 30.0,
+    "contextWindow": 1000000,
+    "sessionQuota": 0.0
+  },
   "gpt-5.1": {
     "input": 1.07,
     "output": 8.5,

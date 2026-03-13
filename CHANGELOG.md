@@ -5,6 +5,68 @@ All notable changes to OpenCode Monitor will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.5] - 2026-03-13
+
+### 📊 Prometheus Metrics Endpoint
+
+New `ocmonitor metrics` command starts a lightweight HTTP server exposing session analytics in Prometheus exposition format for Grafana integration.
+
+#### Added
+- **`metrics` command** - Starts Prometheus metrics server on configurable port (default: 9090)
+- **OCMonitorCollector class** - Custom collector pattern yielding fresh session data on each scrape
+- **MetricsServer service** - HTTP server with graceful shutdown on Ctrl+C
+- **MetricsConfig** - Configuration section for host/port settings
+
+#### Metrics Exposed
+- `ocmonitor_tokens_input_total{model}` - Total input tokens per model
+- `ocmonitor_tokens_output_total{model}` - Total output tokens per model
+- `ocmonitor_tokens_cache_read_total{model}` - Total cache read tokens per model
+- `ocmonitor_tokens_cache_write_total{model}` - Total cache write tokens per model
+- `ocmonitor_cost_dollars_total{model}` - Total cost per model
+- `ocmonitor_sessions_total{model}` - Total sessions per model
+- `ocmonitor_interactions_total{model}` - Total interactions per model
+- `ocmonitor_output_rate_tokens_per_second{model}` - P50 output rate per model
+- `ocmonitor_session_duration_hours_total` - Total session duration across all models
+- `ocmonitor_sessions_by_project{project}` - Sessions grouped by project
+
+#### Usage
+```bash
+# Start metrics server (default port 9090)
+ocmonitor metrics
+
+# Custom port
+ocmonitor metrics --port 8080
+
+# Custom host
+ocmonitor metrics --host 127.0.0.1 --port 9090
+
+# Scrape metrics
+curl http://localhost:9090/metrics
+```
+
+#### Configuration
+```toml
+[metrics]
+port = 9090
+host = "0.0.0.0"
+```
+
+#### Files Modified
+- `ocmonitor/services/metrics_server.py` - Created metrics server with Custom Collector pattern
+- `ocmonitor/cli.py` - Added `metrics` command
+- `ocmonitor/config.py` - Added `MetricsConfig` class
+- `ocmonitor/config.toml` - Added `[metrics]` section
+- `requirements.txt`, `setup.py`, `pyproject.toml` - Added `prometheus_client>=0.17.0` dependency
+
+#### Dependencies
+- `prometheus_client>=0.17.0` - Required for metrics endpoint
+- Install with: `pip install "ocmonitor[metrics]"` or `pip install prometheus_client>=0.17.0`
+
+#### Tests
+- 8 unit tests for OCMonitorCollector (empty sessions, per-model labels, error handling)
+- 3 unit tests for MetricsServer (startup, registration, graceful shutdown)
+- 3 integration tests for CLI command (help, port configuration, error handling)
+
 ## [0.9.4] - 2026-03-03
 
 ### 🔍 Model Detail Command
@@ -298,6 +360,7 @@ ocmonitor export <type>    # Data export functionality
 
 ## Version History Summary
 
+- **v0.9.5** - Prometheus `/metrics` endpoint for Grafana integration
 - **v0.9.4** - Model detail command with fuzzy matching; live workflow picker and session pinning
 - **v0.9.3** - Tool usage tracking in live dashboard
 - **v0.9.2** - Remote pricing fallback from models.dev

@@ -13,6 +13,7 @@ from ocmonitor.config import (
     ExportConfig,
     ModelsConfig,
     AnalyticsConfig,
+    MetricsConfig,
     Config,
     ModelPricing,
     ConfigManager,
@@ -518,3 +519,40 @@ remote_fallback = false
         assert "valid-model" in pricing
         # Invalid model should be skipped
         assert "invalid-model" not in pricing
+
+
+class TestMetricsConfig:
+    """Tests for MetricsConfig model."""
+
+    def test_metrics_config_defaults(self):
+        """Test default metrics configuration values."""
+        config = MetricsConfig()
+        assert config.port == 9090
+        assert config.host == "0.0.0.0"
+
+    def test_metrics_config_in_main_config(self):
+        """Test that Config has a metrics attribute."""
+        config = Config()
+        assert hasattr(config, "metrics")
+        assert isinstance(config.metrics, MetricsConfig)
+        assert config.metrics.port == 9090
+
+    def test_metrics_config_from_toml(self, temp_directory):
+        """Test parsing TOML with [metrics] section."""
+        config_file = temp_directory / "config.toml"
+        config_file.write_text("""
+[metrics]
+port = 8080
+host = "127.0.0.1"
+""")
+        manager = ConfigManager(config_path=str(config_file))
+        cfg = manager.config
+        assert cfg.metrics.port == 8080
+        assert cfg.metrics.host == "127.0.0.1"
+
+    def test_metrics_config_port_validation(self):
+        """Test port range validation."""
+        with pytest.raises(ValueError):
+            MetricsConfig(port=80)  # Below 1024
+        with pytest.raises(ValueError):
+            MetricsConfig(port=70000)  # Above 65535

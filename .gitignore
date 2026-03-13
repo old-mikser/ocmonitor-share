@@ -130,6 +130,8 @@ exports/
 !config.toml
 models.remote.json
 models_dev_api.json
+docs/
+grafana-testing/
 
 # IDE
 .vscode/

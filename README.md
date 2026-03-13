@@ -42,6 +42,7 @@ Transform your OpenCode usage data into beautiful, actionable insights with comp
 - **📋 CSV Export** - Spreadsheet-compatible exports with metadata
 - **🔄 JSON Export** - Machine-readable exports for custom integrations
 - **📊 Multiple Report Types** - Sessions, daily, weekly, monthly, model, and project reports
+- **📈 Prometheus Metrics** - Real-time metrics endpoint for Grafana/Prometheus integration
 
 ## 🚀 Quick Start
 
@@ -56,7 +57,7 @@ Transform your OpenCode usage data into beautiful, actionable insights with comp
 uv tool install git+https://github.com/Shlomob/ocmonitor-share.git
 
 # With optional extras
-uv tool install "git+https://github.com/Shlomob/ocmonitor-share.git#egg=ocmonitor[charts,export]"
+uv tool install "git+https://github.com/Shlomob/ocmonitor-share.git#egg=ocmonitor[charts,export,metrics]"
 ```
 
 **Why uv?**
@@ -155,6 +156,7 @@ ocmonitor model claude-sonnet-4-5
 | `ocmonitor projects` | Project usage statistics |
 | `ocmonitor agents` | List detected agents and types |
 | `ocmonitor export <type>` | Export to CSV/JSON |
+| `ocmonitor metrics` | Prometheus metrics endpoint |
 | `ocmonitor config show` | Show current configuration |
 
 ### Global Options
@@ -369,6 +371,27 @@ ocmonitor model opus -f json  # JSON output
 - 🔧 **Tool Stats** - Per-tool calls, success, failed, color-coded success rate
 
 
+#### Prometheus Metrics
+
+```bash
+# Start metrics server (default port 9090)
+ocmonitor metrics
+
+# Custom port
+ocmonitor metrics --port 8080
+
+# Scrape metrics
+curl http://localhost:9090/metrics
+```
+
+**Metrics exposed:**
+- `ocmonitor_tokens_input_total{model}` - Input tokens per model
+- `ocmonitor_tokens_output_total{model}` - Output tokens per model
+- `ocmonitor_cost_dollars_total{model}` - Total cost per model
+- `ocmonitor_sessions_total{model}` - Session count per model
+- `ocmonitor_session_duration_hours_total` - Total session duration
+- `ocmonitor_sessions_by_project{project}` - Sessions by project
+
 ## ⚙️ Configuration
 
 ### Configuration File Location
@@ -418,6 +441,11 @@ remote_fallback = false
 remote_url = "https://models.dev/api.json"
 remote_timeout_seconds = 8
 remote_cache_ttl_hours = 24
+
+[metrics]
+# Prometheus metrics server configuration
+port = 9090
+host = "0.0.0.0"
 ```
 
 **Configuration File Search Order:**

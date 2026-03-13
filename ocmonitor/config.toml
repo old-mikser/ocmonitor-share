@@ -46,3 +46,8 @@ allow_stale_cache_on_error = true
 default_timeframe = "daily"
 # Number of recent sessions to analyze by default
 recent_sessions_limit = 50
+
+[metrics]
+# Prometheus metrics server settings
+port = 9090
+host = "0.0.0.0"

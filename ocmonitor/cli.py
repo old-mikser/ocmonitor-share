@@ -1,5 +1,6 @@
 """Command line interface for OpenCode Monitor."""
 
+import errno
 import json
 from contextlib import contextmanager
 from datetime import datetime
@@ -944,6 +945,57 @@ def config_set(ctx: click.Context, key: str, value: str):
     click.echo(f"Configuration setting is not yet implemented.")
     click.echo(f"Would set {key} = {value}")
     click.echo("Please edit the config.toml file directly for now.")
+
+
+@cli.command()
+@click.option("--port", "-p", type=int, default=None,
+              help="Port to serve metrics on (default: 9090)")
+@click.option("--host", type=str, default=None,
+              help="Host to bind to (default: 0.0.0.0)")
+@click.pass_context
+def metrics(ctx, port, host):
+    """Start a Prometheus metrics endpoint.
+
+    Exposes session analytics at /metrics for Prometheus scraping.
+    """
+    config = ctx.obj["config"]
+    console = ctx.obj["console"]
+
+    port = port or config.metrics.port
+    host = host or config.metrics.host
+
+    try:
+        from .services.metrics_server import MetricsServer
+    except ImportError:
+        click.echo(
+            "prometheus_client is required for the metrics command.\n"
+            "Install it with: pip install prometheus_client>=0.17.0",
+            err=True,
+        )
+        ctx.exit(1)
+        return
+
+    try:
+        console.print(f"[status.success]Starting Prometheus metrics server...[/status.success]")
+        console.print(f"[metric.label]Endpoint:[/metric.label] [metric.value]http://{host}:{port}/metrics[/metric.value]")
+        console.print("[dim]Press Ctrl+C to stop.[/dim]")
+
+        server = MetricsServer(ctx.obj["pricing_data"], host=host, port=port)
+        server.start()
+    except KeyboardInterrupt:
+        console.print("\n[status.warning]Metrics server stopped.[/status.warning]")
+    except OSError as e:
+        if e.errno == errno.EADDRINUSE:
+            click.echo(f"Port {port} is already in use. Try a different port with --port.", err=True)
+        else:
+            click.echo(f"Error starting metrics server: {e}", err=True)
+        ctx.exit(1)
+    except Exception as e:
+        error_msg = create_user_friendly_error(e)
+        click.echo(f"Error starting metrics server: {error_msg}", err=True)
+        if ctx.obj["verbose"]:
+            click.echo(f"Details: {str(e)}", err=True)
+        ctx.exit(1)
 
 
 @cli.command()

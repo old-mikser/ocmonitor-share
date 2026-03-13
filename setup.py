@@ -33,6 +33,7 @@ setup(
         "rich>=13.0.0",
         "pydantic>=2.0.0",
         "toml>=0.10.0",
+        "prometheus_client>=0.17.0",
     ],
     extras_require={
         "dev": [

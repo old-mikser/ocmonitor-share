@@ -266,6 +266,48 @@ class TestLiveCommand:
         assert captured["kwargs"]["interactive_switch"] is True
 
 
+class TestMetricsCommand:
+    """Tests for metrics CLI command."""
+
+    def test_metrics_help(self):
+        """Test metrics command help."""
+        runner = CliRunner()
+        result = runner.invoke(cli, ['metrics', '--help'])
+
+        assert result.exit_code == 0
+        assert "--port" in result.output
+        assert "--host" in result.output
+
+    def test_metrics_starts_server(self):
+        """Test metrics command starts server with correct args."""
+        runner = CliRunner()
+
+        with patch("ocmonitor.services.metrics_server.MetricsServer") as MockServer:
+            instance = MockServer.return_value
+            instance.start.side_effect = KeyboardInterrupt
+
+            result = runner.invoke(cli, ['metrics', '--port', '9999', '--host', '127.0.0.1'])
+
+        MockServer.assert_called_once()
+        call_kwargs = MockServer.call_args
+        # positional: pricing_data; keyword: host, port
+        assert call_kwargs.kwargs["port"] == 9999
+        assert call_kwargs.kwargs["host"] == "127.0.0.1"
+
+    def test_metrics_port_in_use(self):
+        """Test friendly error when port is in use."""
+        runner = CliRunner()
+
+        with patch("ocmonitor.services.metrics_server.MetricsServer") as MockServer:
+            instance = MockServer.return_value
+            instance.start.side_effect = OSError("Address already in use")
+
+            result = runner.invoke(cli, ['metrics', '--port', '9090'])
+
+        assert result.exit_code == 1
+        assert "already in use" in result.output
+
+
 class TestCLIHelp:
     """Tests for CLI help functionality."""
     
