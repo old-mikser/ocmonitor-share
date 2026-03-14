@@ -5,6 +5,45 @@ All notable changes to OpenCode Monitor will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2] - 2026-03-14
+
+### 🌍 Currency Conversion
+
+Display costs in your local currency instead of USD with preset rates or live exchange rates.
+
+#### Added
+- **CurrencyConverter class** - Converts USD costs to display currency at render time
+- **CurrencyConfig** - Configuration for code, symbol, rate, display format, decimals
+- **Rate fetcher service** - Optional live rates from frankfurter.dev API
+- **Exchange rate caching** - 24-hour TTL with stale cache fallback
+
+#### Configuration
+```toml
+[currency]
+code = "GBP"
+symbol = "£"
+rate = 0.79
+display_format = "symbol_prefix"  # or "code_suffix"
+remote_rates = false
+```
+
+#### Presets
+- USD ($), GBP (£), EUR (€), CNY (¥), JPY (¥), INR (₹)
+- JPY auto-applies 0 decimal places
+
+#### Files Added
+- `ocmonitor/utils/currency.py` - CurrencyConverter class
+- `ocmonitor/services/rate_fetcher.py` - frankfurter.dev integration
+
+#### Files Modified
+- `ocmonitor/config.py` - Added CurrencyConfig
+- `ocmonitor/config.toml` - Added [currency] section
+- `ocmonitor/cli.py` - Wired converter into services
+- `ocmonitor/ui/tables.py` - format_currency delegates to converter
+- `ocmonitor/services/report_generator.py` - Replaced 12 hardcoded `$` sites
+- `ocmonitor/ui/dashboard.py` - Replaced 15 hardcoded `$` sites
+- `ocmonitor/services/export_service.py` - Converted costs + currency metadata
+
 ## [1.0.1] - 2026-03-13
 
 ### 📊 Prometheus Metrics Endpoint
@@ -360,7 +399,8 @@ ocmonitor export <type>    # Data export functionality
 
 ## Version History Summary
 
-- **v0.9.5** - Prometheus `/metrics` endpoint for Grafana integration
+- **v1.1.0** - Currency conversion (USD, GBP, EUR, JPY, CNY, INR) with live rates
+- **v1.0.1** - Prometheus `/metrics` endpoint for Grafana integration
 - **v0.9.4** - Model detail command with fuzzy matching; live workflow picker and session pinning
 - **v0.9.3** - Tool usage tracking in live dashboard
 - **v0.9.2** - Remote pricing fallback from models.dev
