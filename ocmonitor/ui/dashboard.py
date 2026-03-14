@@ -21,13 +21,21 @@ from ..utils.time_utils import TimeUtils
 class DashboardUI:
     """UI components for the live dashboard."""
 
-    def __init__(self, console: Optional[Console] = None):
+    def __init__(self, console: Optional[Console] = None, currency_converter=None):
         """Initialize dashboard UI.
 
         Args:
             console: Rich console instance. If None, creates a new one.
+            currency_converter: Optional CurrencyConverter for currency formatting.
         """
         self.console = console or Console()
+        self.currency_converter = currency_converter
+
+    def _fmt_cost(self, amount: Decimal) -> str:
+        """Format cost amount using currency converter."""
+        if self.currency_converter:
+            return self.currency_converter.format(amount)
+        return f"${amount:.2f}"
 
     def create_header(
         self,
@@ -128,14 +136,14 @@ class DashboardUI:
 
             cost_text = (
                 f"[dashboard.header]Cost Tracking[/dashboard.header]\n"
-                f"[metric.label]Session:[/metric.label] [metric.cost]${total_cost:.2f}[/metric.cost]\n"
-                f"[metric.label]Quota:[/metric.label] [metric.cost]${quota:.2f}[/metric.cost]\n"
+                f"[metric.label]Session:[/metric.label] [metric.cost]{self._fmt_cost(total_cost)}[/metric.cost]\n"
+                f"[metric.label]Quota:[/metric.label] [metric.cost]{self._fmt_cost(quota)}[/metric.cost]\n"
                 f"[{cost_color}]{progress_bar}[/{cost_color}]"
             )
         else:
             cost_text = (
                 f"[dashboard.header]Cost Tracking[/dashboard.header]\n"
-                f"[metric.label]Session:[/metric.label] [metric.cost]${total_cost:.2f}[/metric.cost]\n"
+                f"[metric.label]Session:[/metric.label] [metric.cost]{self._fmt_cost(total_cost)}[/metric.cost]\n"
                 f"[metric.label]No quota configured[/metric.label]"
             )
 
@@ -181,7 +189,7 @@ class DashboardUI:
             model_lines.append(
                 f"[metric.label]{model_name}[/metric.label]  -  "
                 f"[metric.value]{stats['tokens'].total:,}[/metric.value] [metric.tokens]tok[/metric.tokens]  "
-                f"[metric.cost]${stats['cost']:.2f}[/metric.cost]  -  "
+                f"[metric.cost]{self._fmt_cost(stats['cost'])}[/metric.cost]  -  "
                 f"context {context_bar}{rate_str}"
             )
 
@@ -311,14 +319,14 @@ class DashboardUI:
             cost_color = self.get_cost_color(percentage)
             cost_section = (
                 f"[dashboard.header]Cost[/dashboard.header]\n"
-                f"[metric.label]Session:[/metric.label] [metric.cost]${total_cost:.2f}[/metric.cost]  "
-                f"[metric.label]Quota:[/metric.label] [metric.cost]${quota:.2f}[/metric.cost]\n"
+                f"[metric.label]Session:[/metric.label] [metric.cost]{self._fmt_cost(total_cost)}[/metric.cost]  "
+                f"[metric.label]Quota:[/metric.label] [metric.cost]{self._fmt_cost(quota)}[/metric.cost]\n"
                 f"[{cost_color}]{progress_bar}[/{cost_color}]"
             )
         else:
             cost_section = (
                 f"[dashboard.header]Cost[/dashboard.header]\n"
-                f"[metric.label]Session:[/metric.label] [metric.cost]${total_cost:.2f}[/metric.cost]  "
+                f"[metric.label]Session:[/metric.label] [metric.cost]{self._fmt_cost(total_cost)}[/metric.cost]  "
                 f"[dim]No quota[/dim]"
             )
 
@@ -374,14 +382,14 @@ class DashboardUI:
             cost_color = self.get_cost_color(percentage)
             cost_section = (
                 f"[dashboard.header]Cost[/dashboard.header]\n"
-                f"[metric.label]Total:[/metric.label] [metric.cost]${total_cost:.2f}[/metric.cost]  "
-                f"[metric.label]Quota:[/metric.label] [metric.cost]${quota:.2f}[/metric.cost]\n"
+                f"[metric.label]Total:[/metric.label] [metric.cost]{self._fmt_cost(total_cost)}[/metric.cost]  "
+                f"[metric.label]Quota:[/metric.label] [metric.cost]{self._fmt_cost(quota)}[/metric.cost]\n"
                 f"[{cost_color}]{progress_bar}[/{cost_color}]"
             )
         else:
             cost_section = (
                 f"[dashboard.header]Cost[/dashboard.header]\n"
-                f"[metric.label]Total:[/metric.label] [metric.cost]${total_cost:.2f}[/metric.cost]  "
+                f"[metric.label]Total:[/metric.label] [metric.cost]{self._fmt_cost(total_cost)}[/metric.cost]  "
                 f"[dim]No quota[/dim]"
             )
 
@@ -551,7 +559,7 @@ class DashboardUI:
         lines = []
 
         if model_tokens is not None:
-            cost_str = f" [metric.cost]${model_cost:.2f}[/metric.cost]" if model_cost is not None else ""
+            cost_str = f" [metric.cost]{self._fmt_cost(model_cost)}[/metric.cost]" if model_cost is not None else ""
             
             # Add context and output rate info
             extra_info = []
@@ -901,14 +909,14 @@ class DashboardUI:
 
             cost_text = (
                 f"[dashboard.header]Workflow Cost[/dashboard.header]\n"
-                f"[metric.label]Total:[/metric.label] [metric.cost]${total_cost:.2f}[/metric.cost]\n"
-                f"[metric.label]Quota:[/metric.label] [metric.cost]${quota:.2f}[/metric.cost]\n"
+                f"[metric.label]Total:[/metric.label] [metric.cost]{self._fmt_cost(total_cost)}[/metric.cost]\n"
+                f"[metric.label]Quota:[/metric.label] [metric.cost]{self._fmt_cost(quota)}[/metric.cost]\n"
                 f"[{cost_color}]{progress_bar}[/{cost_color}]"
             )
         else:
             cost_text = (
                 f"[dashboard.header]Workflow Cost[/dashboard.header]\n"
-                f"[metric.label]Total:[/metric.label] [metric.cost]${total_cost:.2f}[/metric.cost]\n"
+                f"[metric.label]Total:[/metric.label] [metric.cost]{self._fmt_cost(total_cost)}[/metric.cost]\n"
                 f"[metric.label]No quota configured[/metric.label]"
             )
 
@@ -968,7 +976,7 @@ class DashboardUI:
             model_lines.append(
                 f"[metric.label]{model_name}[/metric.label]  -  "
                 f"[metric.value]{stats['tokens']:,}[/metric.value] [metric.tokens]tok[/metric.tokens]  "
-                f"[metric.cost]${stats['cost']:.2f}[/metric.cost]  -  "
+                f"[metric.cost]{self._fmt_cost(stats['cost'])}[/metric.cost]  -  "
                 f"context {context_bar}{rate_str}"
             )
 

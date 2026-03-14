@@ -15,16 +15,24 @@ from ..services.session_grouper import SessionGrouper
 class ReportGenerator:
     """Service for generating various types of reports."""
 
-    def __init__(self, analyzer: SessionAnalyzer, console: Optional[Console] = None):
+    def __init__(self, analyzer: SessionAnalyzer, console: Optional[Console] = None, currency_converter=None):
         """Initialize report generator.
 
         Args:
             analyzer: SessionAnalyzer instance
             console: Rich console for output
+            currency_converter: Optional CurrencyConverter for currency formatting
         """
         self.analyzer = analyzer
-        self.table_formatter = TableFormatter(console)
+        self.currency_converter = currency_converter
+        self.table_formatter = TableFormatter(console, currency_converter)
         self.console = console or Console()
+
+    def _fmt_cost(self, amount: Decimal) -> str:
+        """Format cost amount using currency converter."""
+        if self.currency_converter:
+            return self.currency_converter.format(amount)
+        return f"${amount:.2f}"
 
     def _get_model_breakdown_for_sessions(self, sessions: List[SessionData]) -> List[Dict[str, Any]]:
         """Calculate per-model breakdown for a set of sessions.
@@ -589,7 +597,7 @@ class ReportGenerator:
                     f"[table.row.model]+{workflow.sub_agent_count}[/table.row.model]",
                     f"[status.success]{sum(s.interaction_count for s in workflow.all_sessions)}[/status.success]",
                     f"[table.row.tokens]{workflow.total_tokens.total:,}[/table.row.tokens]",
-                    f"[table.row.cost]${workflow_cost:.2f}[/table.row.cost]",
+                    f"[table.row.cost]{self._fmt_cost(workflow_cost)}[/table.row.cost]",
                     style="table.row.main"
                 )
 
@@ -617,7 +625,7 @@ class ReportGenerator:
                     main.agent or "main",
                     f"{main.interaction_count}",
                     f"{main.total_tokens.total:,}",
-                    f"${main_cost:.2f}",
+                    self._fmt_cost(main_cost),
                     style="table.row.dim"
                 )
 
@@ -647,7 +655,7 @@ class ReportGenerator:
                         sub.agent or "sub",
                         f"{sub.interaction_count}",
                         f"{sub.total_tokens.total:,}",
-                        f"${sub_cost:.2f}",
+                        self._fmt_cost(sub_cost),
                         style="table.row.dim"
                     )
             else:
@@ -678,7 +686,7 @@ class ReportGenerator:
                     main.agent or "-",
                     f"{main.interaction_count}",
                     f"{main.total_tokens.total:,}",
-                    f"${main_cost:.2f}"
+                    self._fmt_cost(main_cost)
                 )
 
         self.console.print(table)
@@ -719,7 +727,7 @@ class ReportGenerator:
                     f"{len(day.sessions)}",
                     f"{day.total_interactions}",
                     f"{day.total_tokens.total:,}",
-                    f"${day_cost:.2f}"
+                    self._fmt_cost(day_cost)
                 )
                 
                 model_breakdown = self._get_model_breakdown_for_sessions(day.sessions)
@@ -729,7 +737,7 @@ class ReportGenerator:
                         f"{model_data['sessions']}",
                         f"{model_data['interactions']}",
                         f"{model_data['tokens']:,}",
-                        f"${model_data['cost']:.2f}",
+                        self._fmt_cost(model_data['cost']),
                         style="table.row.dim"
                     )
             
@@ -773,7 +781,7 @@ class ReportGenerator:
                 f"{week.total_sessions}",
                 f"{week.total_interactions}",
                 f"{week.total_tokens.total:,}",
-                f"${week_cost:.2f}"
+                self._fmt_cost(week_cost)
             )
             
             if breakdown:
@@ -789,7 +797,7 @@ class ReportGenerator:
                         f"{model_data['sessions']}",
                         f"{model_data['interactions']}",
                         f"{model_data['tokens']:,}",
-                        f"${model_data['cost']:.2f}",
+                        self._fmt_cost(model_data['cost']),
                         style="table.row.dim"
                     )
 
@@ -818,7 +826,7 @@ class ReportGenerator:
                 f"{month.total_sessions}",
                 f"{month.total_interactions}",
                 f"{month.total_tokens.total:,}",
-                f"${month_cost:.2f}"
+                self._fmt_cost(month_cost)
             )
             
             if breakdown:
@@ -834,7 +842,7 @@ class ReportGenerator:
                         f"{model_data['sessions']}",
                         f"{model_data['interactions']}",
                         f"{model_data['tokens']:,}",
-                        f"${model_data['cost']:.2f}",
+                        self._fmt_cost(model_data['cost']),
                         style="table.row.dim"
                     )
 
@@ -873,7 +881,7 @@ class ReportGenerator:
                 f"{project.total_sessions}",
                 f"{project.total_interactions}",
                 f"{project.total_tokens.total:,}",
-                f"${project.total_cost:.4f}",
+                self._fmt_cost(project.total_cost),
                 models_display
             )
 
@@ -886,7 +894,7 @@ class ReportGenerator:
             f"[metric.value]{sum(p.total_sessions for p in project_breakdown.project_stats)}[/metric.value] sessions, "
             f"[metric.value]{sum(p.total_interactions for p in project_breakdown.project_stats)}[/metric.value] interactions, "
             f"[metric.tokens]{project_breakdown.total_tokens.total:,}[/metric.tokens] tokens, "
-            f"[metric.cost]${project_breakdown.total_cost:.2f}[/metric.cost]"
+            f"[metric.cost]{self._fmt_cost(project_breakdown.total_cost)}[/metric.cost]"
         )
         summary_panel = Panel(summary_text, title="Summary", border_style="status.success")
         self.console.print(summary_panel)

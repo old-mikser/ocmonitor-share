@@ -162,10 +162,30 @@ _REPORT_METHOD_MAP = {
 )
 @click.option("--verbose", "-v", is_flag=True, help="Enable verbose output")
 @click.option(
-    "--no-remote", is_flag=True, help="Disable remote pricing fallback (local-only mode)"
+    "--no-remote-pricing",
+    is_flag=True,
+    help="Disable remote pricing fallback (local-only pricing)",
+)
+@click.option(
+    "--no-remote-rates",
+    is_flag=True,
+    help="Disable remote FX rate fetching (use configured currency rate)",
+)
+@click.option(
+    "--no-remote",
+    is_flag=True,
+    help="Deprecated: disable all remote lookups (pricing and FX rates)",
 )
 @click.pass_context
-def cli(ctx: click.Context, config: Optional[str], theme: Optional[str], verbose: bool, no_remote: bool):
+def cli(
+    ctx: click.Context,
+    config: Optional[str],
+    theme: Optional[str],
+    verbose: bool,
+    no_remote_pricing: bool,
+    no_remote_rates: bool,
+    no_remote: bool,
+):
     """OpenCode Monitor - Analytics and monitoring for OpenCode sessions.
 
     Monitor token usage, costs, and performance metrics from your OpenCode
@@ -188,11 +208,29 @@ def cli(ctx: click.Context, config: Optional[str], theme: Optional[str], verbose
         if theme:
             cfg.ui.theme = theme
         
-        # Store no_remote flag in context for later use
-        ctx.obj["no_remote"] = no_remote
+        # Resolve deprecated flag to the new split flags
+        if no_remote:
+            no_remote_pricing = True
+            no_remote_rates = True
+
+        # Store flags in context for later use
+        ctx.obj["no_remote_pricing"] = no_remote_pricing
+        ctx.obj["no_remote_rates"] = no_remote_rates
             
         ctx.obj["config"] = cfg
-        ctx.obj["pricing_data"] = config_manager.load_pricing_data(no_remote=no_remote)
+        ctx.obj["pricing_data"] = config_manager.load_pricing_data(
+            no_remote=no_remote_pricing
+        )
+
+        # Resolve currency
+        currency_cfg = cfg.currency
+        resolved_rate = None
+        if currency_cfg.remote_rates and not no_remote_rates:
+            from .services.rate_fetcher import get_exchange_rate
+            resolved_rate = get_exchange_rate(currency_cfg)
+        from .utils.currency import CurrencyConverter
+        currency_converter = CurrencyConverter.from_config(currency_cfg, resolved_rate)
+        ctx.obj["currency_converter"] = currency_converter
 
         # Initialize Console with the configured theme
         theme_name = cfg.ui.theme
@@ -203,10 +241,10 @@ def cli(ctx: click.Context, config: Optional[str], theme: Optional[str], verbose
         # Initialize services
         analyzer = SessionAnalyzer(ctx.obj["pricing_data"])
         ctx.obj["analyzer"] = analyzer
-        ctx.obj["report_generator"] = ReportGenerator(analyzer, console)
-        ctx.obj["export_service"] = ExportService(cfg.paths.export_dir)
+        ctx.obj["report_generator"] = ReportGenerator(analyzer, console, currency_converter)
+        ctx.obj["export_service"] = ExportService(cfg.paths.export_dir, currency_converter)
         ctx.obj["live_monitor"] = LiveMonitor(
-            ctx.obj["pricing_data"], console, paths_config=cfg.paths
+            ctx.obj["pricing_data"], console, paths_config=cfg.paths, currency_converter=currency_converter
         )
 
     except Exception as e:
@@ -925,6 +963,15 @@ def config_show(ctx: click.Context):
         console.print("[table.header]📤 Export Settings:[/table.header]")
         console.print(f"  [metric.label]Default format:[/metric.label] [metric.value]{config.export.default_format}[/metric.value]")
         console.print(f"  [metric.label]Include metadata:[/metric.label] [metric.value]{config.export.include_metadata}[/metric.value]")
+        console.print()
+        console.print("[table.header]💱 Currency:[/table.header]")
+        console.print(f"  [metric.label]Code:[/metric.label] [metric.value]{config.currency.code}[/metric.value]")
+        console.print(f"  [metric.label]Symbol:[/metric.label] [metric.value]{config.currency.symbol}[/metric.value]")
+        console.print(f"  [metric.label]Rate (from USD):[/metric.label] [metric.value]{config.currency.rate}[/metric.value]")
+        console.print(f"  [metric.label]Display format:[/metric.label] [metric.value]{config.currency.display_format}[/metric.value]")
+        decimals_display = "auto" if config.currency.decimals is None else config.currency.decimals
+        console.print(f"  [metric.label]Decimals:[/metric.label] [metric.value]{decimals_display}[/metric.value]")
+        console.print(f"  [metric.label]Remote rates:[/metric.label] [metric.value]{config.currency.remote_rates}[/metric.value]")
         console.print()
         console.print("[table.header]🤖 Models:[/table.header]")
         console.print(f"  [metric.label]Configured models:[/metric.label] [metric.value]{len(pricing_data)}[/metric.value]")

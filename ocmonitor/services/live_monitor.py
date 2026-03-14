@@ -17,7 +17,7 @@ from rich.table import Table
 
 from ..config import ModelPricing, PathsConfig
 from ..models.session import InteractionFile, SessionData, TokenUsage
-from ..models.tool_usage import ToolUsageStats, ModelToolUsage
+from ..models.tool_usage import ModelToolUsage, ToolUsageStats
 from ..models.workflow import SessionWorkflow
 from ..ui.dashboard import DashboardUI
 from ..ui.tables import TableFormatter
@@ -103,6 +103,7 @@ class LiveMonitor:
         pricing_data: Dict[str, ModelPricing],
         console: Optional[Console] = None,
         paths_config: Optional[PathsConfig] = None,
+        currency_converter=None,
         init_from_db: bool = True,
     ):
         """Initialize live monitor.
@@ -116,7 +117,8 @@ class LiveMonitor:
         self.pricing_data = pricing_data
         self.console = console or Console()
         self.paths_config = paths_config
-        self.dashboard_ui = DashboardUI(console)
+        self.currency_converter = currency_converter
+        self.dashboard_ui = DashboardUI(console, currency_converter)
         self.session_grouper = SessionGrouper()
         self.data_loader = DataLoader()
         self._active_workflows: Dict[str, Any] = {}
@@ -225,7 +227,11 @@ class LiveMonitor:
             for f in main_session.files:
                 if f.time_data and f.time_data.created:
                     latest = max(latest, f.time_data.created / 1000.0)
-        if latest == 0.0 and main_session and isinstance(main_session.start_time, datetime):
+        if (
+            latest == 0.0
+            and main_session
+            and isinstance(main_session.start_time, datetime)
+        ):
             latest = main_session.start_time.timestamp()
         return latest
 
@@ -262,7 +268,8 @@ class LiveMonitor:
         if workflow.main_session.session_id == selected_session_id:
             return True
         return any(
-            session.session_id == selected_session_id for session in workflow.all_sessions
+            session.session_id == selected_session_id
+            for session in workflow.all_sessions
         )
 
     def _resolve_selected_sqlite_workflow(
@@ -368,7 +375,9 @@ class LiveMonitor:
     ) -> Optional[str]:
         """Prompt user to choose workflow number from descriptors."""
         if not descriptors:
-            self.console.print("[status.error]No workflows available for selection.[/status.error]")
+            self.console.print(
+                "[status.error]No workflows available for selection.[/status.error]"
+            )
             return None
 
         while True:
@@ -380,12 +389,16 @@ class LiveMonitor:
             if not choice:
                 return None
             if not choice.isdigit():
-                self.console.print("[status.warning]Please enter a valid number.[/status.warning]")
+                self.console.print(
+                    "[status.warning]Please enter a valid number.[/status.warning]"
+                )
                 continue
 
             selected_idx = int(choice)
             if selected_idx < 1 or selected_idx > len(descriptors):
-                self.console.print("[status.warning]Selection out of range.[/status.warning]")
+                self.console.print(
+                    "[status.warning]Selection out of range.[/status.warning]"
+                )
                 continue
             return str(descriptors[selected_idx - 1]["workflow_id"])
 
@@ -445,14 +458,18 @@ class LiveMonitor:
             return None, False
         if command in {"n", "next"}:
             if len(workflow_ids) == 1:
-                self.console.print("[status.info]Only one active workflow available.[/status.info]")
+                self.console.print(
+                    "[status.info]Only one active workflow available.[/status.info]"
+                )
                 self._live_status_line = "Only one active workflow available."
                 return None, False
             self._live_status_line = "Switching to next workflow."
             return workflow_ids[(current_idx + 1) % len(workflow_ids)], False
         if command in {"p", "prev", "previous"}:
             if len(workflow_ids) == 1:
-                self.console.print("[status.info]Only one active workflow available.[/status.info]")
+                self.console.print(
+                    "[status.info]Only one active workflow available.[/status.info]"
+                )
                 self._live_status_line = "Only one active workflow available."
                 return None, False
             self._live_status_line = "Switching to previous workflow."
@@ -462,7 +479,9 @@ class LiveMonitor:
             if 0 <= idx < len(workflow_ids):
                 self._live_status_line = f"Jumping to workflow #{idx + 1}."
                 return workflow_ids[idx], False
-            self.console.print("[status.warning]Selection out of range.[/status.warning]")
+            self.console.print(
+                "[status.warning]Selection out of range.[/status.warning]"
+            )
             self._live_status_line = "Selection out of range."
             return None, False
 
@@ -611,7 +630,9 @@ class LiveMonitor:
     ) -> Optional[str]:
         """Pause live view, run picker prompt, then resume live view."""
         if not descriptors:
-            self.console.print("[status.warning]No workflows available to pick.[/status.warning]")
+            self.console.print(
+                "[status.warning]No workflows available to pick.[/status.warning]"
+            )
             return None
 
         raw_mode_was_enabled = self._stdin_fd is not None
@@ -819,7 +840,9 @@ class LiveMonitor:
                     )
                     return
             else:
-                current_workflow = self._select_most_recent_file_workflow(active_workflows)
+                current_workflow = self._select_most_recent_file_workflow(
+                    active_workflows
+                )
 
             current_workflow_id = current_workflow.workflow_id
             self.prev_tracked = set(s.session_id for s in current_workflow.all_sessions)
@@ -856,7 +879,9 @@ class LiveMonitor:
                     self.console.print(
                         "[status.warning]Raw key mode unavailable; fallback requires Enter.[/status.warning]"
                     )
-                    self._live_status_line = "Raw-key mode unavailable; commands require Enter."
+                    self._live_status_line = (
+                        "Raw-key mode unavailable; commands require Enter."
+                    )
             self.console.print("[dim]Press Ctrl+C to exit[/dim]\n")
 
             with Live(
@@ -892,7 +917,12 @@ class LiveMonitor:
                                     next_refresh_at = time.time() + refresh_interval
                                 continue
 
-                            should_quit, current_workflow_id, current_workflow, selected_session_id = self._handle_navigation_command(
+                            (
+                                should_quit,
+                                current_workflow_id,
+                                current_workflow,
+                                selected_session_id,
+                            ) = self._handle_navigation_command(
                                 command,
                                 descriptors,
                                 selected_session_id,
@@ -975,7 +1005,9 @@ class LiveMonitor:
         # Get the most recent file (excluding zero-token files)
         recent_file = None
         if session.non_zero_token_files:
-            recent_file = max(session.non_zero_token_files, key=lambda f: f.modification_time)
+            recent_file = max(
+                session.non_zero_token_files, key=lambda f: f.modification_time
+            )
         elif session.files:
             recent_file = max(session.files, key=lambda f: f.modification_time)
 
@@ -1106,8 +1138,12 @@ class LiveMonitor:
             quota = self.pricing_data[recent_file.model_id].session_quota
 
         # Load tool usage statistics (file mode - no SQLite fallback)
-        tool_stats = self._load_tool_stats_for_workflow(workflow, preferred_source="files")
-        tool_stats_by_model = self._load_tool_stats_by_model_for_workflow(workflow, preferred_source="files")
+        tool_stats = self._load_tool_stats_for_workflow(
+            workflow, preferred_source="files"
+        )
+        tool_stats_by_model = self._load_tool_stats_by_model_for_workflow(
+            workflow, preferred_source="files"
+        )
 
         # Create a combined session-like view for the dashboard
         # We'll pass workflow info to the dashboard UI
@@ -1253,15 +1289,17 @@ class LiveMonitor:
         return 0.0
 
     def _load_tool_stats_for_workflow(
-        self, workflow: Any, preferred_source: Optional[Literal["sqlite", "files"]] = None
+        self,
+        workflow: Any,
+        preferred_source: Optional[Literal["sqlite", "files"]] = None,
     ) -> List[ToolUsageStats]:
         """Load tool usage statistics for a workflow's sessions.
-        
+
         Args:
             workflow: Workflow object (SessionWorkflow or WorkflowWrapper)
             preferred_source: Override source selection ("sqlite" or "files").
                 Ensures file-mode monitoring doesn't fall back to SQLite.
-            
+
         Returns:
             List of ToolUsageStats sorted by total_calls descending
         """
@@ -1269,15 +1307,17 @@ class LiveMonitor:
         return self.data_loader.load_tool_usage(session_ids, preferred_source)
 
     def _load_tool_stats_by_model_for_workflow(
-        self, workflow: Any, preferred_source: Optional[Literal["sqlite", "files"]] = None
+        self,
+        workflow: Any,
+        preferred_source: Optional[Literal["sqlite", "files"]] = None,
     ) -> List[ModelToolUsage]:
         """Load tool usage statistics grouped by model for a workflow's sessions.
-        
+
         Args:
             workflow: Workflow object (SessionWorkflow or WorkflowWrapper)
             preferred_source: Override source selection ("sqlite" or "files").
                 Ensures file-mode monitoring doesn't fall back to SQLite.
-            
+
         Returns:
             List of ModelToolUsage sorted by total_calls descending
         """
@@ -1501,7 +1541,9 @@ class LiveMonitor:
                     self.console.print(
                         "[status.warning]Raw key mode unavailable; fallback requires Enter.[/status.warning]"
                     )
-                    self._live_status_line = "Raw-key mode unavailable; commands require Enter."
+                    self._live_status_line = (
+                        "Raw-key mode unavailable; commands require Enter."
+                    )
             self.console.print("[dim]Press Ctrl+C to exit[/dim]\n")
 
             # Start live monitoring
@@ -1526,16 +1568,16 @@ class LiveMonitor:
                                     interactive_switch,
                                 )
                                 if selected_from_picker:
-                                    selected_session_id, switched = self._apply_switch_command_selection(
-                                        selected_session_id,
-                                        current_workflow_id,
-                                        selected_from_picker,
+                                    selected_session_id, switched = (
+                                        self._apply_switch_command_selection(
+                                            selected_session_id,
+                                            current_workflow_id,
+                                            selected_from_picker,
+                                        )
                                     )
                                     if switched and selected_session_id:
                                         self.prev_tracked = set()
-                                        self._live_status_line = (
-                                            f"Switched to workflow {selected_session_id}."
-                                        )
+                                        self._live_status_line = f"Switched to workflow {selected_session_id}."
                                         self.console.print(
                                             f"[status.info]Switched to workflow [metric.value]{selected_session_id}[/metric.value][/status.info]"
                                         )
@@ -1549,19 +1591,23 @@ class LiveMonitor:
                                                 immediate_current["workflow_id"]
                                                 != current_workflow_id
                                             ):
-                                                current_workflow_id = (
-                                                    immediate_current["workflow_id"]
-                                                )
+                                                current_workflow_id = immediate_current[
+                                                    "workflow_id"
+                                                ]
                                                 self.prev_tracked = set()
                                             current_workflow = immediate_current
                                             self.prev_tracked |= set(
                                                 s.session_id
-                                                for s in current_workflow["all_sessions"]
+                                                for s in current_workflow[
+                                                    "all_sessions"
+                                                ]
                                             )
                                             live.update(
                                                 self._generate_sqlite_workflow_dashboard(
                                                     current_workflow,
-                                                    self._controls_hint(interactive_switch),
+                                                    self._controls_hint(
+                                                        interactive_switch
+                                                    ),
                                                 )
                                             )
                                             next_refresh_at = (
@@ -1577,10 +1623,12 @@ class LiveMonitor:
                                     "\n[status.warning]Live monitoring stopped.[/status.warning]"
                                 )
                                 break
-                            selected_session_id, switched = self._apply_switch_command_selection(
-                                selected_session_id,
-                                current_workflow_id,
-                                new_id,
+                            selected_session_id, switched = (
+                                self._apply_switch_command_selection(
+                                    selected_session_id,
+                                    current_workflow_id,
+                                    new_id,
+                                )
                             )
                             if switched and selected_session_id:
                                 self.prev_tracked = set()
@@ -1600,9 +1648,9 @@ class LiveMonitor:
                                         immediate_current["workflow_id"]
                                         != current_workflow_id
                                     ):
-                                        current_workflow_id = (
-                                            immediate_current["workflow_id"]
-                                        )
+                                        current_workflow_id = immediate_current[
+                                            "workflow_id"
+                                        ]
                                         self.prev_tracked = set()
                                     current_workflow = immediate_current
                                     self.prev_tracked |= set(
@@ -1615,9 +1663,7 @@ class LiveMonitor:
                                             self._controls_hint(interactive_switch),
                                         )
                                     )
-                                    next_refresh_at = (
-                                        time.time() + refresh_interval
-                                    )
+                                    next_refresh_at = time.time() + refresh_interval
 
                     if time.time() < next_refresh_at:
                         time.sleep(0.05)
@@ -1775,8 +1821,12 @@ class LiveMonitor:
         workflow_wrapper = WorkflowWrapper(workflow, self.pricing_data)
 
         # Load tool usage statistics (SQLite mode)
-        tool_stats = self._load_tool_stats_for_workflow(workflow_wrapper, preferred_source="sqlite")
-        tool_stats_by_model = self._load_tool_stats_by_model_for_workflow(workflow_wrapper, preferred_source="sqlite")
+        tool_stats = self._load_tool_stats_for_workflow(
+            workflow_wrapper, preferred_source="sqlite"
+        )
+        tool_stats_by_model = self._load_tool_stats_by_model_for_workflow(
+            workflow_wrapper, preferred_source="sqlite"
+        )
 
         # Use the existing dashboard UI
         # Note: WorkflowWrapper mimics SessionWorkflow interface for dashboard compatibility
@@ -1849,7 +1899,11 @@ class LiveMonitor:
                 model_most_recent[f.model_id] = f
             elif f.time_data and f.time_data.created:
                 existing = model_most_recent[f.model_id]
-                existing_time = existing.time_data.created if existing.time_data and existing.time_data.created else 0
+                existing_time = (
+                    existing.time_data.created
+                    if existing.time_data and existing.time_data.created
+                    else 0
+                )
                 if f.time_data.created > existing_time:
                     model_most_recent[f.model_id] = f
 
@@ -1938,7 +1992,14 @@ class LiveMonitor:
 
         # Check pricing data
         if not self.pricing_data:
-            warnings.append("No pricing data available - costs will show as $0.00")
+            zero_cost = (
+                self.currency_converter.format(Decimal("0"))
+                if self.currency_converter
+                else "$0.00"
+            )
+            warnings.append(
+                f"No pricing data available - costs will show as {zero_cost}"
+            )
 
         # Determine if at least one source is available
         if not info["sqlite"]["available"] and not info["files"].get("available"):

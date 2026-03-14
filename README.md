@@ -16,6 +16,7 @@ Transform your OpenCode usage data into beautiful, actionable insights with comp
 ### 💼 Professional Analytics
 - **📈 Comprehensive Reports** - Daily, weekly, and monthly usage breakdowns
 - **💰 Cost Tracking** - Accurate cost calculations for multiple AI models
+- **🌍 Multi-Currency Support** - Display costs in USD, GBP, EUR, JPY, CNY, INR, or any currency with live exchange rates
 - **📊 Model Analytics** - Detailed breakdown of usage per AI model with `--breakdown` flag
 - **🔍 Single Model Deep Dive** - `ocmonitor model <name>` drills into one model with dates, costs, speed, and tool stats
 - **📋 Project Analytics** - Track costs and token usage by coding project
@@ -446,6 +447,25 @@ remote_cache_ttl_hours = 24
 # Prometheus metrics server configuration
 port = 9090
 host = "0.0.0.0"
+
+[currency]
+# Display currency (ISO 4217 code): USD, GBP, EUR, CNY, JPY, INR, or custom
+code = "USD"
+symbol = "$"
+# Conversion rate from USD (ignored when remote_rates = true)
+rate = 1.0
+# Display format: "symbol_prefix" ($1.23) or "code_suffix" (1.23 USD)
+display_format = "symbol_prefix"
+# Decimal places (auto if not set: JPY=0, most others=2)
+# decimals = 2
+
+# Live rate fetching from frankfurter.dev (free, no API key)
+remote_rates = false
+remote_rates_url = "https://api.frankfurter.dev/v1/latest?base=USD"
+remote_rates_timeout_seconds = 8
+remote_rates_cache_ttl_hours = 24
+remote_rates_cache_path = "~/.cache/ocmonitor/exchange_rates.json"
+allow_stale_rates_on_error = true
 ```
 
 **Configuration File Search Order:**
@@ -483,6 +503,44 @@ ocmonitor --no-remote sessions
 1. User override file (`~/.config/ocmonitor/models.json`)
 2. Project/local `models.json`
 3. models.dev remote fallback (fill-only)
+
+### Currency Conversion
+
+OpenCode Monitor supports displaying costs in your local currency instead of USD.
+
+**Quick Setup:**
+```toml
+[currency]
+code = "GBP"
+symbol = "£"
+rate = 0.79
+```
+
+**Supported Presets:**
+| Currency | Code | Symbol | Example Rate |
+|----------|------|--------|--------------|
+| US Dollar | USD | $ | 1.00 |
+| British Pound | GBP | £ | 0.79 |
+| Euro | EUR | € | 0.92 |
+| Chinese Yuan | CNY | ¥ | 7.24 |
+| Japanese Yen | JPY | ¥ | 149.50 |
+| Indian Rupee | INR | ₹ | 83.12 |
+
+**Display Formats:**
+- `symbol_prefix` (default): `$1.23` or `£1.23`
+- `code_suffix`: `1.23 USD` or `1.23 GBP`
+
+**Live Exchange Rates:**
+Enable automatic rate fetching from frankfurter.dev:
+```toml
+[currency]
+code = "EUR"
+symbol = "€"
+remote_rates = true
+```
+
+**JPY/Zero-Decimal Currencies:**
+Currencies like JPY automatically use 0 decimal places unless explicitly configured.
 
 ## 🛠️ Development
 

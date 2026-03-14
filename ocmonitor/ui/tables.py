@@ -17,13 +17,15 @@ from ..utils.formatting import ColorFormatter
 class TableFormatter:
     """Formatter for creating Rich tables."""
 
-    def __init__(self, console: Optional[Console] = None):
+    def __init__(self, console: Optional[Console] = None, currency_converter=None):
         """Initialize table formatter.
 
         Args:
             console: Rich console instance. If None, creates a new one.
+            currency_converter: Optional CurrencyConverter for currency formatting.
         """
         self.console = console or Console()
+        self.currency_converter = currency_converter
 
     def format_number(self, number: int) -> str:
         """Format numbers with thousands separators."""
@@ -31,6 +33,8 @@ class TableFormatter:
 
     def format_currency(self, amount: Decimal) -> str:
         """Format currency amounts."""
+        if self.currency_converter:
+            return self.currency_converter.format(amount)
         return f"${amount:.2f}"
 
     def format_percentage(self, value: float, total: float) -> str:

@@ -51,3 +51,29 @@ recent_sessions_limit = 50
 # Prometheus metrics server settings
 port = 9090
 host = "0.0.0.0"
+
+[currency]
+# Display currency (ISO 4217 code): USD, GBP, EUR, CNY, JPY, INR, or any custom
+code = "USD"
+symbol = "$"
+# Conversion rate from USD (ignored when remote_rates = true)
+rate = 1.0
+# Display format: "symbol_prefix" ($1.23) or "code_suffix" (1.23 USD)
+display_format = "symbol_prefix"
+# Decimal places (auto if not set: JPY=0, most others=2)
+# decimals = 2
+
+# Preset rates for common currencies (uncomment and adjust as needed):
+# GBP: code = "GBP", symbol = "£", rate = 0.79
+# EUR: code = "EUR", symbol = "€", rate = 0.92
+# CNY: code = "CNY", symbol = "¥", rate = 7.24
+# JPY: code = "JPY", symbol = "¥", rate = 149.50
+# INR: code = "INR", symbol = "₹", rate = 83.12
+
+# Live rate fetching from frankfurter.dev (free, no API key required)
+remote_rates = false
+remote_rates_url = "https://api.frankfurter.dev/v1/latest?base=USD"
+remote_rates_timeout_seconds = 8
+remote_rates_cache_ttl_hours = 24
+remote_rates_cache_path = "~/.cache/ocmonitor/exchange_rates.json"
+allow_stale_rates_on_error = true

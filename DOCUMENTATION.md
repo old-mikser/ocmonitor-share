@@ -14,12 +14,13 @@ Welcome to the complete documentation for OpenCode Monitor, a powerful CLI tool 
 4. [Configuration](#configuration)
 5. [Adding New Models](#adding-new-models)
 6. [Remote Pricing Fallback](#remote-pricing-fallback)
-7. [Prometheus Metrics](#prometheus-metrics)
-8. [Setting Usage Quotas](#setting-usage-quotas)
-9. [Exporting Reports](#exporting-reports)
-10. [Configuration Commands](#configuration-commands)
-11. [Troubleshooting](#troubleshooting)
-12. [Advanced Tips](#advanced-tips)
+7. [Currency Conversion](#currency-conversion)
+8. [Prometheus Metrics](#prometheus-metrics)
+9. [Setting Usage Quotas](#setting-usage-quotas)
+10. [Exporting Reports](#exporting-reports)
+11. [Configuration Commands](#configuration-commands)
+12. [Troubleshooting](#troubleshooting)
+13. [Advanced Tips](#advanced-tips)
 
 ---
 
@@ -678,6 +679,25 @@ enable_warnings = true
 # Prometheus metrics server configuration
 port = 9090
 host = "0.0.0.0"
+
+[currency]
+# Display currency (ISO 4217 code): USD, GBP, EUR, CNY, JPY, INR, or custom
+code = "USD"
+symbol = "$"
+# Conversion rate from USD (ignored when remote_rates = true)
+rate = 1.0
+# Display format: "symbol_prefix" ($1.23) or "code_suffix" (1.23 USD)
+display_format = "symbol_prefix"
+# Decimal places (auto if not set: JPY=0, most others=2)
+# decimals = 2
+
+# Live rate fetching from frankfurter.dev (free, no API key)
+remote_rates = false
+remote_rates_url = "https://api.frankfurter.dev/v1/latest?base=USD"
+remote_rates_timeout_seconds = 8
+remote_rates_cache_ttl_hours = 24
+remote_rates_cache_path = "~/.cache/ocmonitor/exchange_rates.json"
+allow_stale_rates_on_error = true
 ```
 
 ---
@@ -975,6 +995,119 @@ User overrides have **highest priority** and will overwrite any local or remote 
   }
   }
 }
+
+---
+
+## 💱 Currency Conversion
+
+OpenCode Monitor supports displaying costs in your local currency instead of USD. All internal calculations remain in USD; conversion happens only at display and export time.
+
+### Quick Setup
+
+Edit your `~/.config/ocmonitor/config.toml`:
+
+```toml
+[currency]
+code = "GBP"
+symbol = "£"
+rate = 0.79
+```
+
+### Supported Preset Currencies
+
+| Currency | Code | Symbol | Example Rate |
+|----------|------|--------|--------------|
+| US Dollar | USD | $ | 1.00 |
+| British Pound | GBP | £ | 0.79 |
+| Euro | EUR | € | 0.92 |
+| Chinese Yuan | CNY | ¥ | 7.24 |
+| Japanese Yen | JPY | ¥ | 149.50 |
+| Indian Rupee | INR | ₹ | 83.12 |
+
+### Configuration Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `code` | ISO 4217 currency code | `USD` |
+| `symbol` | Currency symbol | `$` |
+| `rate` | Conversion rate from USD | `1.0` |
+| `display_format` | `symbol_prefix` ($1.23) or `code_suffix` (1.23 USD) | `symbol_prefix` |
+| `decimals` | Decimal places (auto if not set) | `null` |
+| `remote_rates` | Enable live rate fetching | `false` |
+| `remote_rates_url` | Exchange rate API endpoint | frankfurter.dev |
+| `remote_rates_timeout_seconds` | API request timeout | `8` |
+| `remote_rates_cache_ttl_hours` | Cache validity period | `24` |
+
+### Display Formats
+
+**Symbol Prefix (default):**
+```toml
+display_format = "symbol_prefix"
+# Output: $1.23, £0.99, €5.50
+```
+
+**Code Suffix:**
+```toml
+display_format = "code_suffix"
+# Output: 1.23 USD, 0.99 GBP, 5.50 EUR
+```
+
+### Zero-Decimal Currencies
+
+Currencies like JPY, KRW, and VND automatically use 0 decimal places unless explicitly configured:
+
+```toml
+[currency]
+code = "JPY"
+symbol = "¥"
+rate = 149.50
+# Output: ¥150 (0 decimals auto-applied)
+```
+
+### Live Exchange Rates
+
+Enable automatic rate fetching from [frankfurter.dev](https://www.frankfurter.dev/) (free, no API key required):
+
+```toml
+[currency]
+code = "EUR"
+symbol = "€"
+remote_rates = true
+remote_rates_timeout_seconds = 8
+remote_rates_cache_ttl_hours = 24
+```
+
+**How it works:**
+1. Checks cache freshness before fetching
+2. Downloads latest rates from frankfurter.dev
+3. Caches results locally (24-hour TTL by default)
+4. Falls back to stale cache if fetch fails
+5. Falls back to configured `rate` if no cache available
+
+**Cache location:** `~/.cache/ocmonitor/exchange_rates.json`
+
+### Exporting with Currency
+
+Exported reports include currency metadata:
+
+**JSON export:**
+```json
+{
+  "metadata": {
+    "currency": {
+      "code": "GBP",
+      "rate": 0.79
+    }
+  }
+}
+```
+
+**CSV export:**
+```csv
+# Currency: GBP (rate: 0.79 from USD)
+session_id,cost,model
+ses_123,$1.23,claude-sonnet-4
+```
 
 ---
 
