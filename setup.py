@@ -15,7 +15,7 @@ if os.path.exists("README.md"):
         long_description = f.read()
 
 setup(
-    name="ocmonitor",
+    name="opencode-monitor",
     version=version["__version__"],
     description="Analytics and monitoring tool for OpenCode AI coding sessions",
     long_description=long_description,

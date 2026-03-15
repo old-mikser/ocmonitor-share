@@ -1,5 +1,6 @@
 # 📊 OpenCode Monitor
 
+[![PyPI version](https://img.shields.io/pypi/v/opencode-monitor.svg)](https://pypi.org/project/opencode-monitor/)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -49,68 +50,58 @@ Transform your OpenCode usage data into beautiful, actionable insights with comp
 
 ### Installation
 
-**Option 1: uv Installation (Fastest - One-liner)**
-
-[uv](https://github.com/astral-sh/uv) is a fast Python package manager. It installs the tool in an isolated environment without cloning the repository.
+**Option 1: pip / PyPI (Recommended)**
 
 ```bash
-# Install directly from GitHub
-uv tool install git+https://github.com/Shlomob/ocmonitor-share.git
+pip install opencode-monitor
+```
+
+With optional extras:
+```bash
+pip install "opencode-monitor[charts,export]"
+```
+
+**Option 2: uvx (Run without installing)**
+
+```bash
+uvx opencode-monitor live
+```
+
+**Option 3: uv tool install**
+
+[uv](https://github.com/astral-sh/uv) installs the tool in an isolated environment.
+
+```bash
+uv tool install opencode-monitor
 
 # With optional extras
-uv tool install "git+https://github.com/Shlomob/ocmonitor-share.git#egg=ocmonitor[charts,export,metrics]"
+uv tool install "opencode-monitor[charts,export]"
+
+# Easy to upgrade
+uv tool upgrade opencode-monitor
 ```
 
-**Why uv?**
-- No need to clone the repository
-- Lightning-fast dependency resolution
-- Creates isolated environments automatically
-- Easy to upgrade: `uv tool upgrade ocmonitor`
+**Option 4: pipx Installation (Cross Platform)**
 
-**Option 2: pipx Installation (Cross Platform)**
+[pipx](https://pypa.github.io/pipx/) creates isolated environments and works on all platforms (including Arch Linux, Ubuntu, macOS, etc.).
 
-[pipx](https://pypa.github.io/pipx/) is the recommended way to install Python CLI applications. It creates isolated environments and works on all platforms (including Arch Linux, Ubuntu, macOS, etc.).
+```bash
+pipx install opencode-monitor
+```
 
+With optional extras:
+```bash
+pipx install "opencode-monitor[charts,export]"
+```
+
+**Option 5: Install from source**
 ```bash
 git clone https://github.com/Shlomob/ocmonitor-share.git
 cd ocmonitor-share
-pipx install .
-```
-
-**Why pipx?**
-- Creates isolated environments (no dependency conflicts)
-- Works on Arch Linux without breaking system packages
-- No sudo required
-- Easy to upgrade or uninstall
-
-**Optional extras:**
-```bash
-# With visualization charts
-pipx install ".[charts]"
-
-# With export functionality  
-pipx install ".[export]"
-
-# With all extras
-pipx install ".[charts,export]"
-```
-
-**Option 3: Automated Installation (Linux/macOS)**
-```bash
-git clone https://github.com/Shlomob/ocmonitor-share.git
-cd ocmonitor-share
-./install.sh
-```
-
-**Option 4: Manual Installation**
-```bash
-git clone https://github.com/Shlomob/ocmonitor-share.git
-cd ocmonitor-share
-python3 -m pip install -r requirements.txt
 python3 -m pip install -e .
 ```
 
-**Option 5: Dockerized Installation**
+**Option 6: Dockerized Installation**
 ```bash
 docker compose build
 ```
