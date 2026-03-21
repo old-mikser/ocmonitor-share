@@ -546,6 +546,9 @@ class TableFormatter:
 
             # Parent session
             session_cost = session.calculate_total_cost(pricing_data)
+            workflow_total_cost = session_cost + sum(
+                sub.calculate_total_cost(pricing_data) for sub in sub_agents
+            )
             title = session.display_title
             if len(title) > 40:
                 title = title[:37] + "..."
@@ -559,8 +562,8 @@ class TableFormatter:
                 Text(parent_text, style="bold"),
                 self.format_number(workflow_total_tokens),
                 Text(
-                    self.format_currency(session_cost),
-                    style=self.get_cost_color(session_cost),
+                    self.format_currency(workflow_total_cost),
+                    style=self.get_cost_color(workflow_total_cost),
                 ),
                 quota_bar,
             )

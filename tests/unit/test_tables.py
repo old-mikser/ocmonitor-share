@@ -36,3 +36,5 @@ def test_live_dashboard_parent_row_uses_workflow_total_tokens():
 
     # Token column (index 1) should show parent + all sub-agent tokens.
     assert table.columns[1]._cells[0] == "500"
+    # Cost column (index 2) should show parent + all sub-agent cost.
+    assert str(table.columns[2]._cells[0]) == "$3.50"
