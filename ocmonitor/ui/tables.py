@@ -33,6 +33,8 @@ class TableFormatter:
 
     def format_currency(self, amount: Decimal) -> str:
         """Format currency amounts."""
+        if self.currency_converter:
+            return self.currency_converter.format(amount)
         return f"${amount:.2f}"
 
     def format_percentage(self, value: float, total: float) -> str:
@@ -44,19 +46,15 @@ class TableFormatter:
 
     def get_cost_color(self, cost: Decimal, quota: Optional[Decimal] = None) -> str:
         """Get color for cost based on quota using semantic theme tags."""
-        return ColorFormatter.get_cost_color(
-            cost, quota, default_style="table.row.main"
-        )
+        return ColorFormatter.get_cost_color(cost, quota, default_style="table.row.main")
 
-    def create_sessions_table(
-        self, sessions: List[SessionData], pricing_data: Dict[str, Any]
-    ) -> Table:
+    def create_sessions_table(self, sessions: List[SessionData], pricing_data: Dict[str, Any]) -> Table:
         """Create a table for multiple sessions using semantic theme styles."""
         table = Table(
             title="OpenCode Sessions Summary",
             show_header=True,
             header_style="table.header",
-            title_style="table.title",
+            title_style="table.title"
         )
 
         # Add columns
@@ -76,7 +74,7 @@ class TableFormatter:
 
         total_interactions = 0
         total_tokens = TokenUsage()
-        total_cost = Decimal("0.0")
+        total_cost = Decimal('0.0')
         all_interaction_rates: list[float] = []
 
         for session in sorted_sessions:
@@ -98,16 +96,8 @@ class TableFormatter:
             for i, (model, stats) in enumerate(model_breakdown.items()):
                 # Show session info only for first model
                 if i == 0:
-                    start_time = (
-                        session.start_time.strftime("%Y-%m-%d %H:%M:%S")
-                        if session.start_time
-                        else "N/A"
-                    )
-                    duration = (
-                        self._format_duration(session.duration_ms)
-                        if session.duration_ms
-                        else "N/A"
-                    )
+                    start_time = session.start_time.strftime('%Y-%m-%d %H:%M:%S') if session.start_time else 'N/A'
+                    duration = self._format_duration(session.duration_ms) if session.duration_ms else 'N/A'
                     session_display = session.display_title
                     # Truncate if too long for display
                     if len(session_display) > 35:
@@ -123,14 +113,13 @@ class TableFormatter:
                     model_text = Text(f"{model[:22]}...")
 
                 # Get cost color
-                cost_color = self.get_cost_color(stats["cost"])
+                cost_color = self.get_cost_color(stats['cost'])
 
                 # Calculate speed (p50 output tokens per second)
-                rates = stats.get("interaction_rates", [])
+                rates = stats.get('interaction_rates', [])
                 all_interaction_rates.extend(rates)
                 if rates:
                     import statistics
-
                     speed = statistics.median(rates)
                     speed_text = f"{speed:.1f} t/s"
                 else:
@@ -141,12 +130,12 @@ class TableFormatter:
                     duration,
                     session_display,
                     model_text,
-                    self.format_number(stats["files"]),
-                    self.format_number(stats["tokens"].input),
-                    self.format_number(stats["tokens"].output),
-                    self.format_number(stats["tokens"].total),
-                    Text(self.format_currency(stats["cost"]), style=cost_color),
-                    speed_text,
+                    self.format_number(stats['files']),
+                    self.format_number(stats['tokens'].input),
+                    self.format_number(stats['tokens'].output),
+                    self.format_number(stats['tokens'].total),
+                    Text(self.format_currency(stats['cost']), style=cost_color),
+                    speed_text
                 )
 
         # Add separator and totals
@@ -154,7 +143,6 @@ class TableFormatter:
         # Calculate p50 speed for totals
         if all_interaction_rates:
             import statistics
-
             total_speed = statistics.median(all_interaction_rates)
             total_speed_text = f"{total_speed:.1f} t/s"
         else:
@@ -170,20 +158,18 @@ class TableFormatter:
             Text(self.format_number(total_tokens.output), style="table.row.tokens"),
             Text(self.format_number(total_tokens.total), style="table.row.tokens"),
             Text(self.format_currency(total_cost), style="table.row.cost"),
-            Text(total_speed_text, style="table.row.time"),
+            Text(total_speed_text, style="table.row.time")
         )
 
         return table
 
-    def create_session_table(
-        self, session: SessionData, pricing_data: Dict[str, Any]
-    ) -> Table:
+    def create_session_table(self, session: SessionData, pricing_data: Dict[str, Any]) -> Table:
         """Create a table for a single session using semantic theme styles."""
         table = Table(
             title=f"Session: {session.display_title}",
             show_header=True,
             header_style="table.header",
-            title_style="table.title",
+            title_style="table.title"
         )
 
         # Add columns
@@ -197,7 +183,7 @@ class TableFormatter:
         table.add_column("Cost", justify="right", style="table.row.cost")
         table.add_column("Duration", justify="right", style="table.row.time")
 
-        total_cost = Decimal("0.0")
+        total_cost = Decimal('0.0')
         total_tokens = TokenUsage()
 
         for file in session.files:
@@ -215,11 +201,7 @@ class TableFormatter:
             cost_color = self.get_cost_color(cost)
 
             table.add_row(
-                Text(
-                    file.file_name[:27] + "..."
-                    if len(file.file_name) > 30
-                    else file.file_name
-                ),
+                Text(file.file_name[:27] + "..." if len(file.file_name) > 30 else file.file_name),
                 file.model_id,
                 self.format_number(file.tokens.input),
                 self.format_number(file.tokens.output),
@@ -227,7 +209,7 @@ class TableFormatter:
                 self.format_number(file.tokens.cache_read),
                 self.format_number(file.tokens.total),
                 Text(self.format_currency(cost), style=cost_color),
-                duration,
+                duration
             )
 
         # Add totals
@@ -241,20 +223,18 @@ class TableFormatter:
             Text(self.format_number(total_tokens.cache_read), style="status.success"),
             Text(self.format_number(total_tokens.total), style="table.row.tokens"),
             Text(self.format_currency(total_cost), style="table.row.cost"),
-            "",
+            ""
         )
 
         return table
 
-    def create_daily_table(
-        self, daily_usage: List[DailyUsage], pricing_data: Dict[str, Any]
-    ) -> Table:
+    def create_daily_table(self, daily_usage: List[DailyUsage], pricing_data: Dict[str, Any]) -> Table:
         """Create a table for daily usage breakdown using semantic theme styles."""
         table = Table(
             title="Daily Usage Breakdown",
             show_header=True,
             header_style="table.header",
-            title_style="table.title",
+            title_style="table.title"
         )
 
         # Add columns
@@ -270,7 +250,7 @@ class TableFormatter:
         total_sessions = 0
         total_interactions = 0
         total_tokens = TokenUsage()
-        total_cost = Decimal("0.0")
+        total_cost = Decimal('0.0')
 
         for day in daily_usage:
             day_cost = day.calculate_total_cost(pricing_data)
@@ -291,14 +271,14 @@ class TableFormatter:
             cost_color = self.get_cost_color(day_cost)
 
             table.add_row(
-                day.date.strftime("%Y-%m-%d"),
+                day.date.strftime('%Y-%m-%d'),
                 self.format_number(len(day.sessions)),
                 self.format_number(day.total_interactions),
                 self.format_number(day_tokens.input),
                 self.format_number(day_tokens.output),
                 self.format_number(day_tokens.total),
                 Text(self.format_currency(day_cost), style=cost_color),
-                Text(models_text, style="table.row.model"),
+                Text(models_text, style="table.row.model")
             )
 
         # Add totals
@@ -311,7 +291,7 @@ class TableFormatter:
             Text(self.format_number(total_tokens.output), style="table.row.tokens"),
             Text(self.format_number(total_tokens.total), style="table.row.tokens"),
             Text(self.format_currency(total_cost), style="table.row.cost"),
-            "",
+            ""
         )
 
         return table
@@ -322,7 +302,7 @@ class TableFormatter:
             title="Model Usage Breakdown",
             show_header=True,
             header_style="table.header",
-            title_style="table.title",
+            title_style="table.title"
         )
 
         # Add columns
@@ -339,9 +319,7 @@ class TableFormatter:
         total_cost = sum(model.total_cost for model in model_stats)
 
         for model in model_stats:
-            cost_percentage = self.format_percentage(
-                float(model.total_cost), float(total_cost)
-            )
+            cost_percentage = self.format_percentage(float(model.total_cost), float(total_cost))
             cost_color = self.get_cost_color(model.total_cost)
 
             # Format speed
@@ -352,11 +330,7 @@ class TableFormatter:
                 speed_text = f"{speed:.1f} t/s"
 
             table.add_row(
-                Text(
-                    model.model_name[:27] + "..."
-                    if len(model.model_name) > 30
-                    else model.model_name
-                ),
+                Text(model.model_name[:27] + "..." if len(model.model_name) > 30 else model.model_name),
                 self.format_number(model.total_sessions),
                 self.format_number(model.total_interactions),
                 self.format_number(model.total_tokens.input),
@@ -364,7 +338,7 @@ class TableFormatter:
                 self.format_number(model.total_tokens.total),
                 Text(self.format_currency(model.total_cost), style=cost_color),
                 Text(cost_percentage, style=cost_color),
-                speed_text,
+                speed_text
             )
 
         return table
@@ -372,16 +346,14 @@ class TableFormatter:
     def create_progress_bar(self, percentage: float, width: int = 20) -> str:
         """Create a text-based progress bar."""
         filled = int(width * percentage / 100)
-        bar = "█" * filled + "░" * (width - filled)
+        bar = '█' * filled + '░' * (width - filled)
         return f"[{bar}] {percentage:.1f}%"
 
     def _format_duration(self, milliseconds: int) -> str:
         """Format duration in milliseconds to hours and minutes format."""
         return TimeUtils.format_duration_hm(milliseconds)
 
-    def create_summary_panel(
-        self, sessions: List[SessionData], pricing_data: Dict[str, Any]
-    ) -> Panel:
+    def create_summary_panel(self, sessions: List[SessionData], pricing_data: Dict[str, Any]) -> Panel:
         """Create a summary panel with key metrics using semantic theme styles."""
         if not sessions:
             return Panel("No sessions found", title="Summary", title_align="left")
@@ -389,7 +361,7 @@ class TableFormatter:
         total_sessions = len(sessions)
         total_interactions = sum(session.interaction_count for session in sessions)
         total_tokens = TokenUsage()
-        total_cost = Decimal("0.0")
+        total_cost = Decimal('0.0')
         models_used = set()
 
         for session in sessions:
@@ -407,38 +379,36 @@ class TableFormatter:
             f"[metric.important]Interactions:[/metric.important] [metric.value]{self.format_number(total_interactions)}[/metric.value]",
             f"[metric.important]Total Tokens:[/metric.important] [metric.tokens]{self.format_number(total_tokens.total)}[/metric.tokens]",
             f"[metric.important]Total Cost:[/metric.important] [metric.cost]{self.format_currency(total_cost)}[/metric.cost]",
-            f"[metric.important]Models Used:[/metric.important] [metric.value]{len(models_used)}[/metric.value]",
+            f"[metric.important]Models Used:[/metric.important] [metric.value]{len(models_used)}[/metric.value]"
         ]
 
         return Panel(
             "\n".join(summary_lines),
             title="Summary",
             title_align="left",
-            border_style="table.header",
+            border_style="table.header"
         )
 
-    def create_hierarchical_table(
-        self, hierarchy: Dict[str, Any], pricing_data: Dict[str, Any]
-    ) -> Table:
+    def create_hierarchical_table(self, hierarchy: Dict[str, Any], pricing_data: Dict[str, Any]) -> Table:
         """Create a hierarchical table showing parent sessions with sub-agents.
-
+        
         Args:
             hierarchy: Dictionary with 'root_sessions' and 'source'
             pricing_data: Model pricing information
-
+            
         Returns:
             Rich Table with hierarchical display
         """
-        source = hierarchy.get("source", "unknown")
-        root_sessions = hierarchy.get("root_sessions", [])
-
+        source = hierarchy.get('source', 'unknown')
+        root_sessions = hierarchy.get('root_sessions', [])
+        
         table = Table(
             title=f"OpenCode Sessions (Source: {source.upper()})",
             show_header=True,
             header_style="table.header",
-            title_style="table.title",
+            title_style="table.title"
         )
-
+        
         # Add columns
         table.add_column("Session", style="table.row.main", max_width=40)
         table.add_column("Type", style="table.row.model", width=12)
@@ -446,102 +416,88 @@ class TableFormatter:
         table.add_column("Tokens", justify="right", style="table.row.tokens")
         table.add_column("Cost", justify="right", style="table.row.cost")
         table.add_column("Duration", justify="right", style="table.row.time")
-
+        
         for root in root_sessions:
-            session = root["session"]
-            sub_agents = root.get("sub_agents", [])
-
+            session = root['session']
+            sub_agents = root.get('sub_agents', [])
+            
             # Parent session row
             session_cost = session.calculate_total_cost(pricing_data)
-            duration = (
-                self._format_duration(session.duration_ms)
-                if session.duration_ms
-                else "N/A"
-            )
+            duration = self._format_duration(session.duration_ms) if session.duration_ms else 'N/A'
             title = session.display_title
             if len(title) > 37:
                 title = title[:34] + "..."
-
+            
             # Format parent row with folder icon
             parent_text = f"📁 {title}"
-
+            
             table.add_row(
                 Text(parent_text, style="bold"),
                 "Parent",
                 self.format_number(session.interaction_count),
                 self.format_number(session.total_tokens.total),
-                Text(
-                    self.format_currency(session_cost),
-                    style=self.get_cost_color(session_cost),
-                ),
-                duration,
+                Text(self.format_currency(session_cost), style=self.get_cost_color(session_cost)),
+                duration
             )
-
+            
             # Sub-agent rows
             for sub in sub_agents:
                 sub_cost = sub.calculate_total_cost(pricing_data)
-                sub_duration = (
-                    self._format_duration(sub.duration_ms) if sub.duration_ms else "N/A"
-                )
+                sub_duration = self._format_duration(sub.duration_ms) if sub.duration_ms else 'N/A'
                 sub_title = sub.display_title
                 if len(sub_title) > 35:
                     sub_title = sub_title[:32] + "..."
-
+                
                 # Indent sub-agent with tree branch
                 sub_text = f"└── ↳ {sub_title}"
-
+                
                 table.add_row(
                     Text(sub_text, style="dim"),
                     "Sub-agent",
                     self.format_number(sub.interaction_count),
                     self.format_number(sub.total_tokens.total),
-                    Text(
-                        self.format_currency(sub_cost),
-                        style=self.get_cost_color(sub_cost),
-                    ),
-                    sub_duration,
+                    Text(self.format_currency(sub_cost), style=self.get_cost_color(sub_cost)),
+                    sub_duration
                 )
-
+            
             # Add separator after each parent group (except last)
             if root != root_sessions[-1]:
                 table.add_section()
-
+        
         return table
 
-    def create_live_dashboard_table(
-        self, hierarchy: Dict[str, Any], pricing_data: Dict[str, Any]
-    ) -> Table:
+    def create_live_dashboard_table(self, hierarchy: Dict[str, Any], pricing_data: Dict[str, Any]) -> Table:
         """Create a live dashboard table with hierarchical display.
-
+        
         Args:
             hierarchy: Dictionary with 'root_sessions' and 'source'
             pricing_data: Model pricing information
-
+            
         Returns:
             Rich Table formatted for live dashboard
         """
-        source = hierarchy.get("source", "unknown")
-        root_sessions = hierarchy.get("root_sessions", [])
-
+        source = hierarchy.get('source', 'unknown')
+        root_sessions = hierarchy.get('root_sessions', [])
+        
         # Get top 10 most recent parent sessions
         recent_roots = root_sessions[:10]
-
+        
         table = Table(
             show_header=True,
             header_style="table.header",
             title_style="table.title",
-            expand=True,
+            expand=True
         )
-
+        
         # Add columns
         table.add_column("Session", style="table.row.main", max_width=45)
         table.add_column("Tokens", justify="right", style="table.row.tokens", width=12)
         table.add_column("Cost", justify="right", style="table.row.cost", width=10)
         table.add_column("Quota", justify="left", style="table.row.time", width=20)
-
+        
         for root in recent_roots:
-            session = root["session"]
-            sub_agents = root.get("sub_agents") or []
+            session = root['session']
+            sub_agents = root.get('sub_agents') or []
             sub_costs = [sub.calculate_total_cost(pricing_data) for sub in sub_agents]
 
             workflow_total_tokens = session.total_tokens.total + sum(
@@ -562,11 +518,8 @@ class TableFormatter:
             table.add_row(
                 Text(parent_text, style="bold"),
                 self.format_number(workflow_total_tokens),
-                Text(
-                    self.format_currency(workflow_total_cost),
-                    style=self.get_cost_color(workflow_total_cost),
-                ),
-                quota_bar,
+                Text(self.format_currency(workflow_total_cost), style=self.get_cost_color(workflow_total_cost)),
+                quota_bar
             )
 
             # Sub-agents (show max 3)
@@ -581,25 +534,17 @@ class TableFormatter:
                 table.add_row(
                     Text(sub_text, style="dim"),
                     self.format_number(sub.total_tokens.total),
-                    Text(
-                        self.format_currency(sub_cost),
-                        style=self.get_cost_color(sub_cost),
-                    ),
-                    "",
+                    Text(self.format_currency(sub_cost), style=self.get_cost_color(sub_cost)),
+                    ""
                 )
-
+            
             # Show indicator if more sub-agents exist
             if len(sub_agents) > 3:
                 table.add_row(
-                    Text(
-                        f"    ... and {len(sub_agents) - 3} more sub-agents",
-                        style="dim italic",
-                    ),
-                    "",
-                    "",
-                    "",
+                    Text(f"    ... and {len(sub_agents) - 3} more sub-agents", style="dim italic"),
+                    "", "", ""
                 )
-
+            
             # Add separator
             if root != recent_roots[-1]:
                 table.add_section()
@@ -618,60 +563,32 @@ class TableFormatter:
         lines = []
 
         # Date info
-        first_used = (
-            stats.first_used.strftime("%Y-%m-%d") if stats.first_used else "N/A"
-        )
-        last_used = stats.last_used.strftime("%Y-%m-%d") if stats.last_used else "N/A"
-        lines.append(
-            f"[metric.label]First Used[/metric.label]      [metric.value]{first_used}[/metric.value]"
-        )
-        lines.append(
-            f"[metric.label]Last Used[/metric.label]       [metric.value]{last_used}[/metric.value]"
-        )
-        lines.append(
-            f"[metric.label]Sessions[/metric.label]        [metric.value]{self.format_number(stats.total_sessions)}[/metric.value]"
-        )
-        lines.append(
-            f"[metric.label]Days Used[/metric.label]       [metric.value]{self.format_number(stats.total_days_used)}[/metric.value]"
-        )
-        lines.append(
-            f"[metric.label]Interactions[/metric.label]    [metric.value]{self.format_number(stats.total_interactions)}[/metric.value]"
-        )
+        first_used = stats.first_used.strftime('%Y-%m-%d') if stats.first_used else 'N/A'
+        last_used = stats.last_used.strftime('%Y-%m-%d') if stats.last_used else 'N/A'
+        lines.append(f"[metric.label]First Used[/metric.label]      [metric.value]{first_used}[/metric.value]")
+        lines.append(f"[metric.label]Last Used[/metric.label]       [metric.value]{last_used}[/metric.value]")
+        lines.append(f"[metric.label]Sessions[/metric.label]        [metric.value]{self.format_number(stats.total_sessions)}[/metric.value]")
+        lines.append(f"[metric.label]Days Used[/metric.label]       [metric.value]{self.format_number(stats.total_days_used)}[/metric.value]")
+        lines.append(f"[metric.label]Interactions[/metric.label]    [metric.value]{self.format_number(stats.total_interactions)}[/metric.value]")
         lines.append("")
 
         # Token breakdown
-        lines.append(
-            f"[metric.label]Input Tokens[/metric.label]    [metric.tokens]{self.format_number(stats.total_tokens.input)}[/metric.tokens]"
-        )
-        lines.append(
-            f"[metric.label]Output Tokens[/metric.label]   [metric.tokens]{self.format_number(stats.total_tokens.output)}[/metric.tokens]"
-        )
-        lines.append(
-            f"[metric.label]Cache Read[/metric.label]      [metric.tokens]{self.format_number(stats.total_tokens.cache_read)}[/metric.tokens]"
-        )
-        lines.append(
-            f"[metric.label]Cache Write[/metric.label]     [metric.tokens]{self.format_number(stats.total_tokens.cache_write)}[/metric.tokens]"
-        )
+        lines.append(f"[metric.label]Input Tokens[/metric.label]    [metric.tokens]{self.format_number(stats.total_tokens.input)}[/metric.tokens]")
+        lines.append(f"[metric.label]Output Tokens[/metric.label]   [metric.tokens]{self.format_number(stats.total_tokens.output)}[/metric.tokens]")
+        lines.append(f"[metric.label]Cache Read[/metric.label]      [metric.tokens]{self.format_number(stats.total_tokens.cache_read)}[/metric.tokens]")
+        lines.append(f"[metric.label]Cache Write[/metric.label]     [metric.tokens]{self.format_number(stats.total_tokens.cache_write)}[/metric.tokens]")
         lines.append("")
 
         # Cost info
-        lines.append(
-            f"[metric.label]Total Cost[/metric.label]      [metric.cost]{self.format_currency(stats.total_cost)}[/metric.cost]"
-        )
-        lines.append(
-            f"[metric.label]Avg/Day[/metric.label]         [metric.cost]{self.format_currency(stats.avg_cost_per_day)}[/metric.cost]"
-        )
-        lines.append(
-            f"[metric.label]Avg/Session[/metric.label]     [metric.cost]{self.format_currency(stats.avg_cost_per_session)}[/metric.cost]"
-        )
+        lines.append(f"[metric.label]Total Cost[/metric.label]      [metric.cost]{self.format_currency(stats.total_cost)}[/metric.cost]")
+        lines.append(f"[metric.label]Avg/Day[/metric.label]         [metric.cost]{self.format_currency(stats.avg_cost_per_day)}[/metric.cost]")
+        lines.append(f"[metric.label]Avg/Session[/metric.label]     [metric.cost]{self.format_currency(stats.avg_cost_per_session)}[/metric.cost]")
         lines.append("")
 
         # Speed
         speed = stats.p50_output_rate
         speed_text = f"{speed:.1f} tok/s (p50)" if speed > 0 else "N/A"
-        lines.append(
-            f"[metric.label]Output Speed[/metric.label]    [metric.value]{speed_text}[/metric.value]"
-        )
+        lines.append(f"[metric.label]Output Speed[/metric.label]    [metric.value]{speed_text}[/metric.value]")
 
         return Panel(
             "\n".join(lines),
@@ -680,9 +597,7 @@ class TableFormatter:
             border_style="table.header",
         )
 
-    def create_model_tool_table(
-        self, tool_stats: list[ToolUsageStats], model_name: str
-    ) -> Table:
+    def create_model_tool_table(self, tool_stats: list[ToolUsageStats], model_name: str) -> Table:
         """Create a table showing tool usage for a model.
 
         Args:
@@ -724,3 +639,4 @@ class TableFormatter:
             )
 
         return table
+
