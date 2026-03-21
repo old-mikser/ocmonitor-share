@@ -538,17 +538,15 @@ class TableFormatter:
 
         for root in recent_roots:
             session = root["session"]
-            sub_agents = root.get("sub_agents", [])
+            sub_agents = root.get("sub_agents") or []
+            sub_costs = [sub.calculate_total_cost(pricing_data) for sub in sub_agents]
 
             workflow_total_tokens = session.total_tokens.total + sum(
                 sub.total_tokens.total for sub in sub_agents
             )
 
-            # Parent session
             session_cost = session.calculate_total_cost(pricing_data)
-            workflow_total_cost = session_cost + sum(
-                sub.calculate_total_cost(pricing_data) for sub in sub_agents
-            )
+            workflow_total_cost = session_cost + sum(sub_costs)
             title = session.display_title
             if len(title) > 40:
                 title = title[:37] + "..."
@@ -569,8 +567,8 @@ class TableFormatter:
             )
 
             # Sub-agents (show max 3)
-            for sub in sub_agents[:3]:
-                sub_cost = sub.calculate_total_cost(pricing_data)
+            for i, sub in enumerate(sub_agents[:3]):
+                sub_cost = sub_costs[i]
                 sub_title = sub.display_title
                 if len(sub_title) > 38:
                     sub_title = sub_title[:35] + "..."

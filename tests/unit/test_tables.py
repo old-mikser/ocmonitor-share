@@ -38,3 +38,51 @@ def test_live_dashboard_parent_row_uses_workflow_total_tokens():
     assert table.columns[1]._cells[0] == "500"
     # Cost column (index 2) should show parent + all sub-agent cost.
     assert str(table.columns[2]._cells[0]) == "$3.50"
+
+
+def test_live_dashboard_parent_row_with_no_sub_agents():
+    formatter = TableFormatter()
+
+    parent = MagicMock()
+    parent.display_title = "Solo Parent"
+    parent.duration_percentage = 20.0
+    parent.total_tokens.total = 150
+    parent.calculate_total_cost.return_value = Decimal("1.00")
+
+    hierarchy = {
+        "root_sessions": [
+            {
+                "session": parent,
+                "sub_agents": [],
+            }
+        ]
+    }
+
+    table = formatter.create_live_dashboard_table(hierarchy, pricing_data={})
+
+    assert table.columns[1]._cells[0] == "150"
+    assert str(table.columns[2]._cells[0]) == "$1.00"
+
+
+def test_live_dashboard_parent_row_with_null_sub_agents():
+    formatter = TableFormatter()
+
+    parent = MagicMock()
+    parent.display_title = "Null Sub Parent"
+    parent.duration_percentage = 20.0
+    parent.total_tokens.total = 200
+    parent.calculate_total_cost.return_value = Decimal("2.50")
+
+    hierarchy = {
+        "root_sessions": [
+            {
+                "session": parent,
+                "sub_agents": None,
+            }
+        ]
+    }
+
+    table = formatter.create_live_dashboard_table(hierarchy, pricing_data={})
+
+    assert table.columns[1]._cells[0] == "200"
+    assert str(table.columns[2]._cells[0]) == "$2.50"
