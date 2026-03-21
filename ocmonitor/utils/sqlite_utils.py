@@ -621,7 +621,7 @@ class SQLiteProcessor:
             )
             active_workflows.extend(orphan_workflows)
 
-            return active_workflows
+            return active_workflows[:10]
         finally:
             conn.close()
 
