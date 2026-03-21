@@ -602,7 +602,7 @@ class SQLiteProcessor:
                 GROUP BY s.id
                 HAVING last_parent_message_time > ?
                 ORDER BY last_parent_message_time DESC
-                LIMIT 10
+                LIMIT 30
             """,
                 (threshold_ms,),
             ).fetchall()
