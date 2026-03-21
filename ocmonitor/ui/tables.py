@@ -499,38 +499,38 @@ class TableFormatter:
             session = root['session']
             sub_agents = root.get('sub_agents') or []
             sub_costs = [sub.calculate_total_cost(pricing_data) for sub in sub_agents]
-
-            workflow_total_tokens = session.total_tokens.total + sum(
+            
+            session_total_tokens = session.total_tokens.total + sum(
                 sub.total_tokens.total for sub in sub_agents
             )
-
+            
             session_cost = session.calculate_total_cost(pricing_data)
-            workflow_total_cost = session_cost + sum(sub_costs)
+            session_total_cost = session_cost + sum(sub_costs)
             title = session.display_title
             if len(title) > 40:
                 title = title[:37] + "..."
-
+            
             # Progress bar for quota
             quota_bar = self.create_progress_bar(session.duration_percentage, width=12)
-
+            
             parent_text = f"📁 {title}"
-
+            
             table.add_row(
                 Text(parent_text, style="bold"),
-                self.format_number(workflow_total_tokens),
-                Text(self.format_currency(workflow_total_cost), style=self.get_cost_color(workflow_total_cost)),
+                self.format_number(session_total_tokens),
+                Text(self.format_currency(session_total_cost), style=self.get_cost_color(session_total_cost)),
                 quota_bar
             )
-
+            
             # Sub-agents (show max 3)
             for i, sub in enumerate(sub_agents[:3]):
                 sub_cost = sub_costs[i]
                 sub_title = sub.display_title
                 if len(sub_title) > 38:
                     sub_title = sub_title[:35] + "..."
-
+                
                 sub_text = f"└── ↳ {sub_title}"
-
+                
                 table.add_row(
                     Text(sub_text, style="dim"),
                     self.format_number(sub.total_tokens.total),

@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 from ocmonitor.ui.tables import TableFormatter
 
 
-def test_live_dashboard_parent_row_uses_workflow_total_tokens():
+def test_live_dashboard_parent_row_uses_session_total_tokens():
     formatter = TableFormatter()
 
     parent = MagicMock()
