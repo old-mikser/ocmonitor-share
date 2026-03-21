@@ -25,6 +25,12 @@ def get_default_cache_path() -> str:
     return os.path.join(cache_home, "ocmonitor", "models_dev_api.json")
 
 
+def _default_rates_cache_path() -> str:
+    """Get default cache path for exchange rates."""
+    cache_home = os.getenv("XDG_CACHE_HOME") or "~/.cache"
+    return os.path.join(cache_home, "ocmonitor", "exchange_rates.json")
+
+
 class PathsConfig(BaseModel):
     """Configuration for file paths."""
     messages_dir: str = Field(default=opencode_storage_path("message"))
@@ -32,7 +38,7 @@ class PathsConfig(BaseModel):
     database_file: str = Field(default="~/.local/share/opencode/opencode.db")
     export_dir: str = Field(default="./exports")
 
-    @field_validator('messages_dir', 'opencode_storage_dir', 'export_dir')
+    @field_validator('messages_dir', 'opencode_storage_dir', 'database_file', 'export_dir')
     @classmethod
     def expand_path(cls, v):
         """Expand user paths and environment variables."""
@@ -82,6 +88,35 @@ class AnalyticsConfig(BaseModel):
     recent_sessions_limit: int = Field(default=50, ge=1, le=1000)
 
 
+class MetricsConfig(BaseModel):
+    """Configuration for Prometheus metrics server."""
+    port: int = Field(default=9090, ge=1024, le=65535)
+    host: str = Field(default="0.0.0.0")
+
+
+class CurrencyConfig(BaseModel):
+    """Configuration for currency display and conversion."""
+    code: str = Field(default="USD")
+    symbol: str = Field(default="$")
+    rate: Decimal = Field(default=Decimal("1.0"), ge=0)
+    display_format: str = Field(default="symbol_prefix", pattern="^(symbol_prefix|code_suffix)$")
+    decimals: Optional[int] = Field(default=None, ge=0, le=6)
+    # Remote rate fetching
+    remote_rates: bool = Field(default=False)
+    remote_rates_url: str = Field(default="https://api.frankfurter.dev/v1/latest?base=USD")
+    remote_rates_timeout_seconds: int = Field(default=8, ge=1, le=60)
+    remote_rates_cache_ttl_hours: int = Field(default=24, ge=1, le=168)
+    remote_rates_cache_path: str = Field(default_factory=lambda: _default_rates_cache_path())
+    allow_stale_rates_on_error: bool = Field(default=True)
+
+    @field_validator('remote_rates_cache_path')
+    @classmethod
+    def expand_currency_paths(cls, v):
+        if v is None:
+            return v
+        return os.path.expanduser(os.path.expandvars(v))
+
+
 class Config(BaseModel):
     """Main configuration class."""
     paths: PathsConfig = Field(default_factory=PathsConfig)
@@ -89,6 +124,8 @@ class Config(BaseModel):
     export: ExportConfig = Field(default_factory=ExportConfig)
     models: ModelsConfig = Field(default_factory=ModelsConfig)
     analytics: AnalyticsConfig = Field(default_factory=AnalyticsConfig)
+    metrics: MetricsConfig = Field(default_factory=MetricsConfig)
+    currency: CurrencyConfig = Field(default_factory=CurrencyConfig)
 
 
 class ModelPricing(BaseModel):

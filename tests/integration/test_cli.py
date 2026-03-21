@@ -5,6 +5,7 @@ import json
 import pytest
 from pathlib import Path
 from click.testing import CliRunner
+from unittest.mock import patch
 
 from ocmonitor.cli import cli
 
@@ -174,6 +175,137 @@ class TestSessionCommand:
         result = runner.invoke(cli, ['session', str(session_dir)])
         
         assert result.exit_code == 0
+
+    def test_session_no_valid_data_does_not_wrap_click_exit(self, tmp_path):
+        """Session with no valid data should not print wrapped Unexpected error."""
+        empty_dir = tmp_path / "empty_session_dir"
+        empty_dir.mkdir()
+
+        runner = CliRunner()
+        result = runner.invoke(cli, ["session", str(empty_dir)])
+
+        assert result.exit_code == 1
+        assert "No valid session data found in the specified directory." in result.output
+        assert "Error analyzing session:" not in result.output
+        assert "Unexpected error: 1" not in result.output
+
+
+class TestLiveCommand:
+    """Tests for live command selection and precedence."""
+
+    def test_live_with_pick_uses_picker_selection(self, mock_sessions_dir):
+        runner = CliRunner()
+        captured = {}
+
+        def fake_start_monitoring(self, base_path, refresh_interval=5, **kwargs):
+            captured["base_path"] = base_path
+            captured["kwargs"] = kwargs
+
+        with patch(
+            "ocmonitor.services.live_monitor.LiveMonitor.validate_monitoring_setup",
+            return_value={
+                "valid": True,
+                "issues": [],
+                "warnings": [],
+                "info": {"sqlite": {"available": False}, "files": {"available": True}},
+            },
+        ), patch(
+            "ocmonitor.services.live_monitor.LiveMonitor.pick_file_workflow",
+            return_value="picked-workflow",
+        ), patch(
+            "ocmonitor.services.live_monitor.LiveMonitor.start_monitoring",
+            new=fake_start_monitoring,
+        ):
+            result = runner.invoke(
+                cli,
+                ["live", str(mock_sessions_dir), "--source", "files", "--pick"],
+            )
+
+        assert result.exit_code == 0
+        assert captured["base_path"] == str(mock_sessions_dir)
+        assert captured["kwargs"]["selected_session_id"] == "picked-workflow"
+        assert captured["kwargs"]["interactive_switch"] is True
+
+    def test_live_session_id_takes_precedence_over_pick(self, mock_sessions_dir):
+        runner = CliRunner()
+        captured = {}
+
+        def fake_start_monitoring(self, base_path, refresh_interval=5, **kwargs):
+            captured["kwargs"] = kwargs
+
+        with patch(
+            "ocmonitor.services.live_monitor.LiveMonitor.validate_monitoring_setup",
+            return_value={
+                "valid": True,
+                "issues": [],
+                "warnings": [],
+                "info": {"sqlite": {"available": False}, "files": {"available": True}},
+            },
+        ), patch(
+            "ocmonitor.services.live_monitor.LiveMonitor.pick_file_workflow",
+            side_effect=AssertionError("picker should not be called"),
+        ), patch(
+            "ocmonitor.services.live_monitor.LiveMonitor.start_monitoring",
+            new=fake_start_monitoring,
+        ):
+            result = runner.invoke(
+                cli,
+                [
+                    "live",
+                    str(mock_sessions_dir),
+                    "--source",
+                    "files",
+                    "--pick",
+                    "--session-id",
+                    "explicit-session",
+                ],
+            )
+
+        assert result.exit_code == 0
+        assert captured["kwargs"]["selected_session_id"] == "explicit-session"
+        assert captured["kwargs"]["interactive_switch"] is True
+
+
+class TestMetricsCommand:
+    """Tests for metrics CLI command."""
+
+    def test_metrics_help(self):
+        """Test metrics command help."""
+        runner = CliRunner()
+        result = runner.invoke(cli, ['metrics', '--help'])
+
+        assert result.exit_code == 0
+        assert "--port" in result.output
+        assert "--host" in result.output
+
+    def test_metrics_starts_server(self):
+        """Test metrics command starts server with correct args."""
+        runner = CliRunner()
+
+        with patch("ocmonitor.services.metrics_server.MetricsServer") as MockServer:
+            instance = MockServer.return_value
+            instance.start.side_effect = KeyboardInterrupt
+
+            result = runner.invoke(cli, ['metrics', '--port', '9999', '--host', '127.0.0.1'])
+
+        MockServer.assert_called_once()
+        call_kwargs = MockServer.call_args
+        # positional: pricing_data; keyword: host, port
+        assert call_kwargs.kwargs["port"] == 9999
+        assert call_kwargs.kwargs["host"] == "127.0.0.1"
+
+    def test_metrics_port_in_use(self):
+        """Test friendly error when port is in use."""
+        runner = CliRunner()
+
+        with patch("ocmonitor.services.metrics_server.MetricsServer") as MockServer:
+            instance = MockServer.return_value
+            instance.start.side_effect = OSError("Address already in use")
+
+            result = runner.invoke(cli, ['metrics', '--port', '9090'])
+
+        assert result.exit_code == 1
+        assert "already in use" in result.output
 
 
 class TestCLIHelp:

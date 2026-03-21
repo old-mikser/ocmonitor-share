@@ -21,16 +21,27 @@ from ..utils.time_utils import TimeUtils
 class DashboardUI:
     """UI components for the live dashboard."""
 
-    def __init__(self, console: Optional[Console] = None):
+    def __init__(self, console: Optional[Console] = None, currency_converter=None):
         """Initialize dashboard UI.
 
         Args:
             console: Rich console instance. If None, creates a new one.
+            currency_converter: Optional CurrencyConverter for currency formatting.
         """
         self.console = console or Console()
+        self.currency_converter = currency_converter
+
+    def _fmt_cost(self, amount: Decimal) -> str:
+        """Format cost amount using currency converter."""
+        if self.currency_converter:
+            return self.currency_converter.format(amount)
+        return f"${amount:.2f}"
 
     def create_header(
-        self, session: SessionData, workflow: Optional[SessionWorkflow] = None
+        self,
+        session: SessionData,
+        workflow: Optional[SessionWorkflow] = None,
+        controls_hint: Optional[str] = None,
     ) -> Panel:
         """Create header panel with session info."""
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -57,6 +68,16 @@ class DashboardUI:
         return Panel(
             header_text,
             title=Text("Dashboard", style="dashboard.title"),
+            title_align="left",
+            border_style="dashboard.border",
+        )
+
+    def create_controls_panel(self, controls_hint: str) -> Panel:
+        """Create dedicated controls panel for live keybind hints."""
+        controls_text = f"[dim]{controls_hint}[/dim]"
+        return Panel(
+            controls_text,
+            title=Text("Controls", style="dashboard.title"),
             title_align="left",
             border_style="dashboard.border",
         )
@@ -115,14 +136,14 @@ class DashboardUI:
 
             cost_text = (
                 f"[dashboard.header]Cost Tracking[/dashboard.header]\n"
-                f"[metric.label]Session:[/metric.label] [metric.cost]${total_cost:.2f}[/metric.cost]\n"
-                f"[metric.label]Quota:[/metric.label] [metric.cost]${quota:.2f}[/metric.cost]\n"
+                f"[metric.label]Session:[/metric.label] [metric.cost]{self._fmt_cost(total_cost)}[/metric.cost]\n"
+                f"[metric.label]Quota:[/metric.label] [metric.cost]{self._fmt_cost(quota)}[/metric.cost]\n"
                 f"[{cost_color}]{progress_bar}[/{cost_color}]"
             )
         else:
             cost_text = (
                 f"[dashboard.header]Cost Tracking[/dashboard.header]\n"
-                f"[metric.label]Session:[/metric.label] [metric.cost]${total_cost:.2f}[/metric.cost]\n"
+                f"[metric.label]Session:[/metric.label] [metric.cost]{self._fmt_cost(total_cost)}[/metric.cost]\n"
                 f"[metric.label]No quota configured[/metric.label]"
             )
 
@@ -154,7 +175,7 @@ class DashboardUI:
 
         model_lines = []
         for model, stats in model_breakdown.items():
-            model_name = model[:20] + "..." if len(model) > 23 else model
+            model_name = model[:35] + "..." if len(model) > 38 else model
             
             # Get context usage for this model
             context_info = per_model_context.get(model, {})
@@ -168,7 +189,7 @@ class DashboardUI:
             model_lines.append(
                 f"[metric.label]{model_name}[/metric.label]  -  "
                 f"[metric.value]{stats['tokens'].total:,}[/metric.value] [metric.tokens]tok[/metric.tokens]  "
-                f"[metric.cost]${stats['cost']:.2f}[/metric.cost]  -  "
+                f"[metric.cost]{self._fmt_cost(stats['cost'])}[/metric.cost]  -  "
                 f"context {context_bar}{rate_str}"
             )
 
@@ -282,6 +303,132 @@ class DashboardUI:
             border_style="dashboard.border",
         )
 
+    def create_status_panel(
+        self,
+        session: SessionData,
+        pricing_data: Dict[str, Any],
+        quota: Optional[Decimal] = None,
+    ) -> Panel:
+        """Create combined status panel with Cost + Session Time."""
+        # --- Cost section ---
+        total_cost = session.calculate_total_cost(pricing_data)
+
+        if quota:
+            percentage = min(100, float(total_cost / quota) * 100)
+            progress_bar = self.create_compact_progress_bar(percentage, 10)
+            cost_color = self.get_cost_color(percentage)
+            cost_section = (
+                f"[dashboard.header]Cost[/dashboard.header]\n"
+                f"[metric.label]Session:[/metric.label] [metric.cost]{self._fmt_cost(total_cost)}[/metric.cost]  "
+                f"[metric.label]Quota:[/metric.label] [metric.cost]{self._fmt_cost(quota)}[/metric.cost]\n"
+                f"[{cost_color}]{progress_bar}[/{cost_color}]"
+            )
+        else:
+            cost_section = (
+                f"[dashboard.header]Cost[/dashboard.header]\n"
+                f"[metric.label]Session:[/metric.label] [metric.cost]{self._fmt_cost(total_cost)}[/metric.cost]  "
+                f"[dim]No quota[/dim]"
+            )
+
+        # --- Time section ---
+        if session.start_time:
+            current_time = datetime.now()
+            session_duration = current_time - session.start_time
+            duration_ms = int(session_duration.total_seconds() * 1000)
+            max_hours = 5.0
+            duration_hours = session_duration.total_seconds() / 3600
+            percentage = min(100.0, (duration_hours / max_hours) * 100.0)
+            duration_display = TimeUtils.format_duration_hm(duration_ms)
+            progress_bar = self.create_compact_progress_bar(percentage, 10)
+            time_color = self.get_time_color(percentage)
+            time_section = (
+                f"[dashboard.header]Time[/dashboard.header]\n"
+                f"[metric.label]Duration:[/metric.label] [metric.value]{duration_display}[/metric.value]  "
+                f"[metric.label]Max:[/metric.label] [metric.value]{max_hours:.0f}h[/metric.value]\n"
+                f"[{time_color}]{progress_bar}[/{time_color}]"
+            )
+        else:
+            time_section = (
+                f"[dashboard.header]Time[/dashboard.header]\n"
+                f"[dim]No timing data[/dim]"
+            )
+
+        status_text = (
+            f"{cost_section}\n"
+            f"[dashboard.border]{'─' * 24}[/dashboard.border]\n"
+            f"{time_section}"
+        )
+
+        return Panel(
+            status_text,
+            title=Text("Status", style="dashboard.title"),
+            title_align="left",
+            border_style="dashboard.border",
+        )
+
+    def create_workflow_status_panel(
+        self,
+        workflow: SessionWorkflow,
+        pricing_data: Dict[str, Any],
+        quota: Optional[Decimal] = None,
+    ) -> Panel:
+        """Create combined status panel with Workflow Cost + Workflow Time."""
+        # --- Cost section ---
+        total_cost = workflow.calculate_total_cost(pricing_data)
+
+        if quota:
+            percentage = min(100, float(total_cost / quota) * 100)
+            progress_bar = self.create_compact_progress_bar(percentage, 10)
+            cost_color = self.get_cost_color(percentage)
+            cost_section = (
+                f"[dashboard.header]Cost[/dashboard.header]\n"
+                f"[metric.label]Total:[/metric.label] [metric.cost]{self._fmt_cost(total_cost)}[/metric.cost]  "
+                f"[metric.label]Quota:[/metric.label] [metric.cost]{self._fmt_cost(quota)}[/metric.cost]\n"
+                f"[{cost_color}]{progress_bar}[/{cost_color}]"
+            )
+        else:
+            cost_section = (
+                f"[dashboard.header]Cost[/dashboard.header]\n"
+                f"[metric.label]Total:[/metric.label] [metric.cost]{self._fmt_cost(total_cost)}[/metric.cost]  "
+                f"[dim]No quota[/dim]"
+            )
+
+        # --- Time section ---
+        if workflow.start_time:
+            current_time = datetime.now()
+            workflow_duration = current_time - workflow.start_time
+            duration_ms = int(workflow_duration.total_seconds() * 1000)
+            max_hours = 5.0
+            duration_hours = workflow_duration.total_seconds() / 3600
+            percentage = min(100.0, (duration_hours / max_hours) * 100.0)
+            duration_display = TimeUtils.format_duration_hm(duration_ms)
+            progress_bar = self.create_compact_progress_bar(percentage, 10)
+            time_color = self.get_time_color(percentage)
+            time_section = (
+                f"[dashboard.header]Time[/dashboard.header]\n"
+                f"[metric.label]Duration:[/metric.label] [metric.value]{duration_display}[/metric.value]  "
+                f"[metric.label]Max:[/metric.label] [metric.value]{max_hours:.0f}h[/metric.value]\n"
+                f"[{time_color}]{progress_bar}[/{time_color}]"
+            )
+        else:
+            time_section = (
+                f"[dashboard.header]Time[/dashboard.header]\n"
+                f"[dim]No timing data[/dim]"
+            )
+
+        status_text = (
+            f"{cost_section}\n"
+            f"[dashboard.border]{'─' * 24}[/dashboard.border]\n"
+            f"{time_section}"
+        )
+
+        return Panel(
+            status_text,
+            title=Text("Status", style="dashboard.title"),
+            title_align="left",
+            border_style="dashboard.border",
+        )
+
     def create_recent_file_panel(self, recent_file: Optional[Any]) -> Panel:
         """Create recent file info panel."""
         if not recent_file:
@@ -298,7 +445,7 @@ class DashboardUI:
 
         file_text = (
             f"[metric.label]File:[/metric.label] [metric.value]{file_name}[/metric.value]\n"
-            f"[metric.label]Model:[/metric.label] [metric.value]{recent_file.model_id[:15]}[/metric.value]"
+            f"[metric.label]Model:[/metric.label] [metric.value]{recent_file.model_id[:35]}[/metric.value]"
         )
 
         if recent_file.time_data and recent_file.time_data.duration_ms:
@@ -396,8 +543,8 @@ class DashboardUI:
             Panel with tool usage information for this model
         """
         model_name = model_tool_usage.model_name
-        if len(model_name) > 20:
-            model_name = model_name[:17] + "..."
+        if len(model_name) > 35:
+            model_name = model_name[:32] + "..."
 
         tool_stats = model_tool_usage.tool_stats[:max_tools]
 
@@ -412,7 +559,7 @@ class DashboardUI:
         lines = []
 
         if model_tokens is not None:
-            cost_str = f" [metric.cost]${model_cost:.2f}[/metric.cost]" if model_cost is not None else ""
+            cost_str = f" [metric.cost]{self._fmt_cost(model_cost)}[/metric.cost]" if model_cost is not None else ""
             
             # Add context and output rate info
             extra_info = []
@@ -560,6 +707,7 @@ class DashboardUI:
         workflow: Optional[SessionWorkflow] = None,
         tool_stats: Optional[List[ToolUsageStats]] = None,
         tool_stats_by_model: Optional[List[ModelToolUsage]] = None,
+        controls_hint: Optional[str] = None,
     ) -> Layout:
         """Create the complete dashboard layout."""
         layout = Layout()
@@ -573,20 +721,18 @@ class DashboardUI:
             # Create panels using workflow totals
             header = self.create_header(session, workflow)
             token_panel = self.create_workflow_token_panel(workflow, recent_file)
-            cost_panel = self.create_workflow_cost_panel(workflow, pricing_data, quota)
+            status_panel = self.create_workflow_status_panel(workflow, pricing_data, quota)
             model_panel = self.create_workflow_model_panel(
                 workflow, pricing_data, per_model_output_rates, per_model_context
             )
-            session_time_panel = self.create_workflow_time_panel(workflow)
         else:
             # Create panels using single session data
             header = self.create_header(session)
             token_panel = self.create_token_panel(session, recent_file)
-            cost_panel = self.create_cost_panel(session, pricing_data, quota)
+            status_panel = self.create_status_panel(session, pricing_data, quota)
             model_panel = self.create_model_panel(
                 session, pricing_data, per_model_output_rates, per_model_context
             )
-            session_time_panel = self.create_session_time_panel(session)
 
         recent_file_panel = self.create_recent_file_panel(recent_file)
 
@@ -630,24 +776,27 @@ class DashboardUI:
                 flat_tool_stats = by_model[0].tool_stats
             tool_panel = self.create_tool_panel(flat_tool_stats)
 
-        # Setup new 4-section layout structure
-        layout.split_column(
-            Layout(header, size=3),  # Compact header
-            Layout(name="primary", minimum_size=8),  # Main metrics
-            Layout(name="secondary", size=6),  # Compact metrics
-            Layout(name="models_tools", minimum_size=4),  # Model + Tool breakdown
-        )
+        # 3-4 section layout: Header, Metrics, Models+Tools, optional Controls (bottom)
+        if controls_hint:
+            controls_panel = self.create_controls_panel(controls_hint)
+            layout.split_column(
+                Layout(header, size=3),  # Compact header
+                Layout(name="metrics", size=12),  # Tokens + Status + Recent (single row)
+                Layout(name="models_tools", minimum_size=4),  # Model + Tool breakdown
+                Layout(controls_panel, size=3),  # Persistent keybind visibility
+            )
+        else:
+            layout.split_column(
+                Layout(header, size=3),  # Compact header
+                Layout(name="metrics", size=12),  # Tokens + Status + Recent (single row)
+                Layout(name="models_tools", minimum_size=4),  # Model + Tool breakdown
+            )
 
-        # Primary section: Token usage (60%) and Cost tracking (40%)
-        layout["primary"].split_row(
-            Layout(token_panel, ratio=3),  # 60% for token data
-            Layout(cost_panel, ratio=2),  # 40% for cost data
-        )
-
-        # Secondary section: Two compact panels (Session Time + Recent File)
-        layout["secondary"].split_row(
-            Layout(session_time_panel, ratio=1),
-            Layout(recent_file_panel, ratio=1),
+        # Metrics section: 3-column layout (Tokens 50% | Status 25% | Recent 25%)
+        layout["metrics"].split_row(
+            Layout(token_panel, ratio=2),  # 50% - token data (most content)
+            Layout(status_panel, ratio=1),  # 25% - cost + time combined
+            Layout(recent_file_panel, ratio=1),  # 25% - recent file info
         )
 
         # Models + Tools section: Full width to tools when using grid (model info embedded in tool panels)
@@ -672,7 +821,7 @@ class DashboardUI:
     def create_compact_progress_bar(self, percentage: float, width: int = 20) -> str:
         """Create a compact progress bar for space-efficient display."""
         filled = int(width * percentage / 100)
-        bar = "▌" * filled + "░" * (width - filled)
+        bar = "█" * filled + "░" * (width - filled)
         return f"{bar} {percentage:.0f}%"
 
     def get_cost_color(self, percentage: float) -> str:
@@ -760,14 +909,14 @@ class DashboardUI:
 
             cost_text = (
                 f"[dashboard.header]Workflow Cost[/dashboard.header]\n"
-                f"[metric.label]Total:[/metric.label] [metric.cost]${total_cost:.2f}[/metric.cost]\n"
-                f"[metric.label]Quota:[/metric.label] [metric.cost]${quota:.2f}[/metric.cost]\n"
+                f"[metric.label]Total:[/metric.label] [metric.cost]{self._fmt_cost(total_cost)}[/metric.cost]\n"
+                f"[metric.label]Quota:[/metric.label] [metric.cost]{self._fmt_cost(quota)}[/metric.cost]\n"
                 f"[{cost_color}]{progress_bar}[/{cost_color}]"
             )
         else:
             cost_text = (
                 f"[dashboard.header]Workflow Cost[/dashboard.header]\n"
-                f"[metric.label]Total:[/metric.label] [metric.cost]${total_cost:.2f}[/metric.cost]\n"
+                f"[metric.label]Total:[/metric.label] [metric.cost]{self._fmt_cost(total_cost)}[/metric.cost]\n"
                 f"[metric.label]No quota configured[/metric.label]"
             )
 
@@ -813,7 +962,7 @@ class DashboardUI:
         for model, stats in sorted(
             model_data.items(), key=lambda x: x[1]["cost"], reverse=True
         ):
-            model_name = model[:20] + "..." if len(model) > 23 else model
+            model_name = model[:35] + "..." if len(model) > 38 else model
             
             # Get context usage for this model
             context_info = per_model_context.get(model, {})
@@ -827,7 +976,7 @@ class DashboardUI:
             model_lines.append(
                 f"[metric.label]{model_name}[/metric.label]  -  "
                 f"[metric.value]{stats['tokens']:,}[/metric.value] [metric.tokens]tok[/metric.tokens]  "
-                f"[metric.cost]${stats['cost']:.2f}[/metric.cost]  -  "
+                f"[metric.cost]{self._fmt_cost(stats['cost'])}[/metric.cost]  -  "
                 f"context {context_bar}{rate_str}"
             )
 
