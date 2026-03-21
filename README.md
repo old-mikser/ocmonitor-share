@@ -1,5 +1,6 @@
 # 📊 OpenCode Monitor
 
+[![PyPI version](https://img.shields.io/pypi/v/opencode-monitor.svg)](https://pypi.org/project/opencode-monitor/)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
@@ -16,7 +17,9 @@ Transform your OpenCode usage data into beautiful, actionable insights with comp
 ### 💼 Professional Analytics
 - **📈 Comprehensive Reports** - Daily, weekly, and monthly usage breakdowns
 - **💰 Cost Tracking** - Accurate cost calculations for multiple AI models
+- **🌍 Multi-Currency Support** - Display costs in USD, GBP, EUR, JPY, CNY, INR, or any currency with live exchange rates
 - **📊 Model Analytics** - Detailed breakdown of usage per AI model with `--breakdown` flag
+- **🔍 Single Model Deep Dive** - `ocmonitor model <name>` drills into one model with dates, costs, speed, and tool stats
 - **📋 Project Analytics** - Track costs and token usage by coding project
 - **⏱️ Performance Metrics** - Session duration and processing time tracking
 - **📅 Flexible Week Boundaries** - Customize weekly reports with 7 start day options (Monday-Sunday)
@@ -41,93 +44,122 @@ Transform your OpenCode usage data into beautiful, actionable insights with comp
 - **📋 CSV Export** - Spreadsheet-compatible exports with metadata
 - **🔄 JSON Export** - Machine-readable exports for custom integrations
 - **📊 Multiple Report Types** - Sessions, daily, weekly, monthly, model, and project reports
+- **📈 Prometheus Metrics** - Real-time metrics endpoint for Grafana/Prometheus integration
 
 ## 🚀 Quick Start
 
 ### Installation
 
-**Option 1: uv Installation (Fastest - One-liner)**
-
-[uv](https://github.com/astral-sh/uv) is a fast Python package manager. It installs the tool in an isolated environment without cloning the repository.
+**Option 1: pip / PyPI (Recommended)**
 
 ```bash
-# Install directly from GitHub
-uv tool install git+https://github.com/Shlomob/ocmonitor-share.git
+pip install opencode-monitor
+```
+
+With optional extras:
+```bash
+pip install "opencode-monitor[charts,export]"
+```
+
+**Option 2: uvx (Run without installing)**
+
+```bash
+uvx opencode-monitor live
+```
+
+**Option 3: uv tool install**
+
+[uv](https://github.com/astral-sh/uv) installs the tool in an isolated environment.
+
+```bash
+uv tool install opencode-monitor
 
 # With optional extras
-uv tool install "git+https://github.com/Shlomob/ocmonitor-share.git#egg=ocmonitor[charts,export]"
+uv tool install "opencode-monitor[charts,export]"
+
+# Easy to upgrade
+uv tool upgrade opencode-monitor
 ```
 
-**Why uv?**
-- No need to clone the repository
-- Lightning-fast dependency resolution
-- Creates isolated environments automatically
-- Easy to upgrade: `uv tool upgrade ocmonitor`
+**Option 4: pipx Installation (Cross Platform)**
 
-**Option 2: pipx Installation (Cross Platform)**
+[pipx](https://pypa.github.io/pipx/) creates isolated environments and works on all platforms (including Arch Linux, Ubuntu, macOS, etc.).
 
-[pipx](https://pypa.github.io/pipx/) is the recommended way to install Python CLI applications. It creates isolated environments and works on all platforms (including Arch Linux, Ubuntu, macOS, etc.).
+```bash
+pipx install opencode-monitor
+```
 
+With optional extras:
+```bash
+pipx install "opencode-monitor[charts,export]"
+```
+
+**Option 5: Install from source**
 ```bash
 git clone https://github.com/Shlomob/ocmonitor-share.git
 cd ocmonitor-share
-pipx install .
-```
-
-**Why pipx?**
-- Creates isolated environments (no dependency conflicts)
-- Works on Arch Linux without breaking system packages
-- No sudo required
-- Easy to upgrade or uninstall
-
-**Optional extras:**
-```bash
-# With visualization charts
-pipx install ".[charts]"
-
-# With export functionality  
-pipx install ".[export]"
-
-# With all extras
-pipx install ".[charts,export]"
-```
-
-**Option 3: Automated Installation (Linux/macOS)**
-```bash
-git clone https://github.com/Shlomob/ocmonitor-share.git
-cd ocmonitor-share
-./install.sh
-```
-
-**Option 4: Manual Installation**
-```bash
-git clone https://github.com/Shlomob/ocmonitor-share.git
-cd ocmonitor-share
-python3 -m pip install -r requirements.txt
 python3 -m pip install -e .
+```
+
+**Option 6: Dockerized Installation**
+```bash
+docker compose build
+```
+
+Usage example:
+```bash
+docker compose run --rm ocmonitor sessions
+```
+
+If your host OpenCode data is not in `~/.local/share/opencode`, set `OPENCODE_DATA_DIR` before running:
+```bash
+OPENCODE_DATA_DIR=/your/path/to/opencode/data/dir docker compose run --rm ocmonitor sessions
 ```
 
 ### Basic Usage
 
 ```bash
-# Quick configuration check
-ocmonitor config show
+# Real-time monitoring dashboard
+ocmonitor live
 
-# Analyze your sessions (auto-detects SQLite or files)
-ocmonitor --theme light sessions
+# View sessions history
+ocmonitor sessions
 
-# Analyze by project
-ocmonitor projects
+# Daily usage breakdown (add --breakdown for per-model detail)
+ocmonitor daily
+ocmonitor daily --breakdown
 
-# Real-time monitoring (dark theme)
-ocmonitor --theme dark live
+# Deep dive into a specific model
+ocmonitor model claude-sonnet-4-5
+```
 
-# Export your data
-ocmonitor export sessions --format csv
+### Command Reference
 
-# Force specific data source
-ocmonitor sessions --source sqlite
-ocmonitor sessions --source files
+| Command | Description |
+|---|---|
+| `ocmonitor live` | Real-time monitoring dashboard |
+| `ocmonitor sessions` | All sessions summary with workflow grouping |
+| `ocmonitor session <path>` | Single session detail |
+| `ocmonitor daily` | Daily usage breakdown |
+| `ocmonitor weekly` | Weekly usage breakdown |
+| `ocmonitor monthly` | Monthly usage breakdown |
+| `ocmonitor models` | Model usage statistics |
+| `ocmonitor model <name>` | Single model deep dive |
+| `ocmonitor projects` | Project usage statistics |
+| `ocmonitor agents` | List detected agents and types |
+| `ocmonitor export <type>` | Export to CSV/JSON |
+| `ocmonitor metrics` | Prometheus metrics endpoint |
+| `ocmonitor config show` | Show current configuration |
+
+### Global Options
+
+These options can be used with any command:
+
+```bash
+ocmonitor --theme light sessions     # Override theme (dark/light)
+ocmonitor --verbose daily            # Show detailed error traces
+ocmonitor --config /path/config.toml sessions  # Use custom config file
+ocmonitor --no-remote sessions       # Disable remote pricing fallback
 ```
 
 ## 📖 Documentation
@@ -173,10 +205,14 @@ By default, sessions are grouped into **workflows** - a main session combined wi
 
 ```bash
 # Sessions with workflow grouping (default)
-ocmonitor sessions ~/.local/share/opencode/storage/message
+ocmonitor sessions
 
 # Sessions without grouping (flat list)
-ocmonitor sessions ~/.local/share/opencode/storage/message --no-group
+ocmonitor sessions --no-group
+
+# Force a specific data source
+ocmonitor sessions --source sqlite   # Force SQLite (v1.2.0+)
+ocmonitor sessions --source files    # Force legacy file storage
 
 # List detected agents and their types
 ocmonitor agents
@@ -196,16 +232,16 @@ Time-based usage breakdown with optional per-model cost analysis.
 
 ```bash
 # Daily breakdown
-ocmonitor daily ~/.local/share/opencode/storage/message
+ocmonitor daily
 
 # Weekly breakdown with per-model breakdown
-ocmonitor weekly ~/.local/share/opencode/storage/message --breakdown
+ocmonitor weekly --breakdown
 
 # Monthly breakdown
-ocmonitor monthly ~/.local/share/opencode/storage/message
+ocmonitor monthly
 
 # Weekly with custom start day
-ocmonitor weekly ~/.local/share/opencode/storage/message --start-day friday --breakdown
+ocmonitor weekly --start-day friday --breakdown
 ```
 
 **`--breakdown` Flag:** Shows token consumption and cost per model within each time period (daily/weekly/monthly), making it easy to see which models are consuming resources.
@@ -219,12 +255,29 @@ Supported days: `monday`, `tuesday`, `wednesday`, `thursday`, `friday`, `saturda
 Real-time monitoring dashboard that updates automatically.
 
 ```bash
-# Start live monitoring (updates every 5 seconds)
-ocmonitor live ~/.local/share/opencode/storage/message
+# Start live monitoring (updates every 3 seconds by default)
+ocmonitor live
 
-# Custom refresh interval (in seconds)
-ocmonitor live ~/.local/share/opencode/storage/message --refresh 10
+# Custom update interval (in seconds)
+ocmonitor live --interval 10
+
+# Pick a workflow by readable title before launching
+# (also enables interactive switching controls by default)
+ocmonitor live --pick
+
+# Pin live monitor to a specific workflow/session ID
+ocmonitor live --session-id ses_abc123
+
+# Force a specific data source
+ocmonitor live --source sqlite    # Force SQLite (v1.2.0+)
+ocmonitor live --source files     # Force legacy file storage
+
+# Enable interactive switching while live monitor runs (experimental)
+ocmonitor live --interactive-switch
 ```
+
+If `--session-id` is pinned and the selected workflow is no longer active, live monitoring stops with a clear message.
+When both `--session-id` and `--pick` are supplied to `ocmonitor live`, `--session-id` takes precedence and `--pick` is ignored.
 
 **Features:**
 - 🔄 Auto-refreshing display with professional UI design
@@ -248,12 +301,88 @@ ocmonitor live ~/.local/share/opencode/storage/message --refresh 10
 
 *Click image to view full-size screenshot of model usage analytics*
 
+```bash
+# Filter by timeframe or date range
+ocmonitor models --timeframe weekly
+ocmonitor models --start-date 2026-01-01 --end-date 2026-02-01
+ocmonitor projects --timeframe monthly
+ocmonitor projects --start-date 2026-01-01 --end-date 2026-02-01
+```
+
 **Model Analytics Features:**
 - Per-model token usage and cost breakdown
 - Cost percentage distribution across models
 - **Speed Column** - Average output tokens per second for each model
 - Session and interaction counts per model
 
+### Single Model Detail
+
+```bash
+# Drill into one model by exact or partial name
+ocmonitor model claude-sonnet-4-5
+ocmonitor model sonnet        # lists all sonnet variants to pick from
+ocmonitor model opus -f json  # JSON output
+```
+
+**Output:**
+```
+╭─ Model Detail: claude-sonnet-4-5 ─────────────────────────────╮
+│ First Used      2025-09-15                                      │
+│ Last Used       2026-02-28                                      │
+│ Sessions        42                                              │
+│ Days Used       28                                              │
+│ Interactions    1,247                                           │
+│                                                                 │
+│ Input Tokens    2,451,320                                       │
+│ Output Tokens   489,210                                         │
+│ Cache Read      1,102,400                                       │
+│ Cache Write     312,500                                         │
+│                                                                 │
+│ Total Cost      $47.23                                          │
+│ Avg/Day         $1.69                                           │
+│ Avg/Session     $1.12                                           │
+│                                                                 │
+│ Output Speed    62.4 tok/s (p50)                                │
+╰─────────────────────────────────────────────────────────────────╯
+
+         Tool Usage for claude-sonnet-4-5
+┏━━━━━━━━┳━━━━━━━┳━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━━━┓
+┃ Tool   ┃ Calls ┃ Success ┃ Failed ┃ Success Rate ┃
+┡━━━━━━━━╇━━━━━━━╇━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━━━┩
+│ read   │   620 │     598 │     22 │         96%  │
+│ edit   │   412 │     389 │     23 │         94%  │
+│ bash   │   298 │     285 │     13 │         96%  │
+└────────┴───────┴─────────┴────────┴──────────────┘
+```
+
+**Features:**
+- 🔍 **Fuzzy Matching** - Partial name matches; shows alternatives when multiple models match
+- 📋 **Key-Value Panel** - First/last used, sessions, days active, interactions, full token breakdown
+- 💰 **Cost Breakdown** - Total cost, average per day, average per session
+- 🚀 **Output Speed** - Median output tokens/sec (p50) across all interactions
+- 🔧 **Tool Stats** - Per-tool calls, success, failed, color-coded success rate
+
+
+#### Prometheus Metrics
+
+```bash
+# Start metrics server (default port 9090)
+ocmonitor metrics
+
+# Custom port
+ocmonitor metrics --port 8080
+
+# Scrape metrics
+curl http://localhost:9090/metrics
+```
+
+**Metrics exposed:**
+- `ocmonitor_tokens_input_total{model}` - Input tokens per model
+- `ocmonitor_tokens_output_total{model}` - Output tokens per model
+- `ocmonitor_cost_dollars_total{model}` - Total cost per model
+- `ocmonitor_sessions_total{model}` - Session count per model
+- `ocmonitor_session_duration_hours_total` - Total session duration
+- `ocmonitor_sessions_by_project{project}` - Sessions by project
 
 ## ⚙️ Configuration
 
@@ -282,13 +411,19 @@ messages_dir = "~/.local/share/opencode/storage/message"
 export_dir = "./exports"
 
 [ui]
-table_style = "rich"
+table_style = "rich"       # "rich", "simple", or "minimal"
+theme = "dark"             # "dark" or "light"
 progress_bars = true
 colors = true
+live_refresh_interval = 3  # Live dashboard refresh in seconds
 
 [export]
 default_format = "csv"
 include_metadata = true
+
+[analytics]
+default_timeframe = "daily"       # "daily", "weekly", or "monthly"
+recent_sessions_limit = 50        # Max sessions to analyze by default
 
 [models]
 # Path to local models pricing configuration
@@ -298,12 +433,39 @@ remote_fallback = false
 remote_url = "https://models.dev/api.json"
 remote_timeout_seconds = 8
 remote_cache_ttl_hours = 24
+
+[metrics]
+# Prometheus metrics server configuration
+port = 9090
+host = "0.0.0.0"
+
+[currency]
+# Display currency (ISO 4217 code): USD, GBP, EUR, CNY, JPY, INR, or custom
+code = "USD"
+symbol = "$"
+# Conversion rate from USD (ignored when remote_rates = true)
+rate = 1.0
+# Display format: "symbol_prefix" ($1.23) or "code_suffix" (1.23 USD)
+display_format = "symbol_prefix"
+# Decimal places (auto if not set: JPY=0, most others=2)
+# decimals = 2
+
+# Live rate fetching from frankfurter.dev (free, no API key)
+remote_rates = false
+remote_rates_url = "https://api.frankfurter.dev/v1/latest?base=USD"
+remote_rates_timeout_seconds = 8
+remote_rates_cache_ttl_hours = 24
+remote_rates_cache_path = "~/.cache/ocmonitor/exchange_rates.json"
+allow_stale_rates_on_error = true
 ```
 
 **Configuration File Search Order:**
-1. `~/.config/ocmonitor/config.toml` (recommended user location)
-2. `config.toml` (current directory)
-3. Project directory fallback
+1. Bundled package default (`ocmonitor/config.toml`)
+2. `~/.config/ocmonitor/config.toml` (recommended user overrides)
+3. `config.toml` (current directory)
+4. `ocmonitor.toml` (current directory)
+
+User settings in `~/.config/ocmonitor/config.toml` override the bundled defaults.
 
 ### Remote Pricing Fallback
 
@@ -329,10 +491,47 @@ ocmonitor --no-remote sessions
 ```
 
 **Pricing Precedence (highest to lowest):**
-1. OpenCode's pre-computed cost (from session data, when available)
-2. User override file (`~/.config/ocmonitor/models.json`)
-3. Project/local `models.json`
-4. models.dev remote fallback (fill-only)
+1. User override file (`~/.config/ocmonitor/models.json`)
+2. Project/local `models.json`
+3. models.dev remote fallback (fill-only)
+
+### Currency Conversion
+
+OpenCode Monitor supports displaying costs in your local currency instead of USD.
+
+**Quick Setup:**
+```toml
+[currency]
+code = "GBP"
+symbol = "£"
+rate = 0.79
+```
+
+**Supported Presets:**
+| Currency | Code | Symbol | Example Rate |
+|----------|------|--------|--------------|
+| US Dollar | USD | $ | 1.00 |
+| British Pound | GBP | £ | 0.79 |
+| Euro | EUR | € | 0.92 |
+| Chinese Yuan | CNY | ¥ | 7.24 |
+| Japanese Yen | JPY | ¥ | 149.50 |
+| Indian Rupee | INR | ₹ | 83.12 |
+
+**Display Formats:**
+- `symbol_prefix` (default): `$1.23` or `£1.23`
+- `code_suffix`: `1.23 USD` or `1.23 GBP`
+
+**Live Exchange Rates:**
+Enable automatic rate fetching from frankfurter.dev:
+```toml
+[currency]
+code = "EUR"
+symbol = "€"
+remote_rates = true
+```
+
+**JPY/Zero-Decimal Currencies:**
+Currencies like JPY automatically use 0 decimal places unless explicitly configured.
 
 ## 🛠️ Development
 
@@ -379,26 +578,32 @@ python3 test_simple.py
 ### Project Architecture
 ```
 ocmonitor/
-├── ocmonitor/              # Core package
-│   ├── cli.py             # Command-line interface
-│   ├── config.py          # Configuration management
-│   ├── models/            # Pydantic data models
-│   │   ├── session.py     # Session and interaction models
-│   │   └── workflow.py    # Workflow grouping models
-│   ├── services/          # Business logic services
-│   │   ├── agent_registry.py    # Agent type detection
-│   │   ├── session_grouper.py   # Workflow grouping logic
-│   │   ├── live_monitor.py      # Real-time monitoring
-│   │   └── report_generator.py  # Report generation
-│   ├── ui/                # Rich UI components
-│   │   └── dashboard.py   # Live dashboard UI
-│   └── utils/             # Utility functions
-│       ├── data_loader.py # Unified data loading (SQLite/files)
-│       ├── file_utils.py  # File processing
-│       └── sqlite_utils.py # SQLite database access
-├── config.toml            # User configuration
-├── models.json            # AI model pricing data
-└── test_sessions/         # Sample test data
+├── cli.py                     # Command-line interface (all commands)
+├── config.py                  # Configuration management, TOML parsing
+├── models/                    # Pydantic data models
+│   ├── analytics.py           # DailyUsage, WeeklyUsage, MonthlyUsage, ModelUsageStats
+│   ├── session.py             # TokenUsage, TimeData, InteractionFile, SessionData
+│   ├── tool_usage.py          # Tool usage tracking models
+│   └── workflow.py            # Workflow grouping models
+├── services/                  # Business logic layer
+│   ├── agent_registry.py      # Agent type detection
+│   ├── export_service.py      # CSV/JSON export functionality
+│   ├── live_monitor.py        # Real-time dashboard with auto-refresh
+│   ├── price_fetcher.py       # Remote pricing from models.dev
+│   ├── report_generator.py    # Rich UI report generation
+│   ├── session_analyzer.py    # Core session analysis and summaries
+│   └── session_grouper.py     # Workflow grouping logic
+├── ui/                        # Rich UI components
+│   ├── dashboard.py           # Live dashboard UI
+│   ├── tables.py              # Table formatting with progress bars
+│   └── theme.py               # Dark/light theme support
+└── utils/                     # Utility functions
+    ├── data_loader.py         # Unified data loading (SQLite/files)
+    ├── error_handling.py      # User-friendly error messages
+    ├── file_utils.py          # File processing
+    ├── formatting.py          # Number/cost formatting utilities
+    ├── sqlite_utils.py        # SQLite database access
+    └── time_utils.py          # Time formatting and calculations
 ```
 
 ## 🤝 Contributing

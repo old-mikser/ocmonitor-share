@@ -15,16 +15,24 @@ from ..services.session_grouper import SessionGrouper
 class ReportGenerator:
     """Service for generating various types of reports."""
 
-    def __init__(self, analyzer: SessionAnalyzer, console: Optional[Console] = None):
+    def __init__(self, analyzer: SessionAnalyzer, console: Optional[Console] = None, currency_converter=None):
         """Initialize report generator.
 
         Args:
             analyzer: SessionAnalyzer instance
             console: Rich console for output
+            currency_converter: Optional CurrencyConverter for currency formatting
         """
         self.analyzer = analyzer
-        self.table_formatter = TableFormatter(console)
+        self.currency_converter = currency_converter
+        self.table_formatter = TableFormatter(console, currency_converter)
         self.console = console or Console()
+
+    def _fmt_cost(self, amount: Decimal) -> str:
+        """Format cost amount using currency converter."""
+        if self.currency_converter:
+            return self.currency_converter.format(amount)
+        return f"${amount:.2f}"
 
     def _get_model_breakdown_for_sessions(self, sessions: List[SessionData]) -> List[Dict[str, Any]]:
         """Calculate per-model breakdown for a set of sessions.
@@ -295,6 +303,174 @@ class ReportGenerator:
 
         return report_data
 
+    def generate_model_detail_report(
+        self, name: str, output_format: str = "table"
+    ) -> Optional[Dict[str, Any]]:
+        """Generate a detailed report for a single model.
+
+        Handles fuzzy matching: 0 matches shows available models,
+        >1 matches shows list, 1 match shows full detail.
+
+        Args:
+            name: Model name query (fuzzy matched)
+            output_format: Output format ("table", "json", "csv")
+
+        Returns:
+            Report data dict, or None if no match
+        """
+        matches = self.analyzer.find_matching_models(name)
+
+        if len(matches) == 0:
+            # No matches - show available models
+            all_models = self.analyzer.find_matching_models("")
+            self.console.print(
+                f"[status.error]No model found matching '{name}'.[/status.error]"
+            )
+            if all_models:
+                self.console.print("\n[metric.label]Available models:[/metric.label]")
+                for m in all_models:
+                    self.console.print(f"  - [table.row.model]{m}[/table.row.model]")
+            return None
+
+        if len(matches) > 1:
+            # Check for exact match first
+            exact = [m for m in matches if m == name]
+            if len(exact) == 1:
+                matches = exact
+            else:
+                self.console.print(
+                    f"[status.warning]Multiple models match '{name}'. "
+                    f"Did you mean one of these?[/status.warning]"
+                )
+                for i, m in enumerate(matches, 1):
+                    self.console.print(f"  {i}. [table.row.model]{m}[/table.row.model]")
+                return None
+
+        model_name = matches[0]
+        stats = self.analyzer.get_model_detail(model_name)
+
+        if stats is None:
+            self.console.print(
+                f"[status.error]No usage data found for model '{model_name}'.[/status.error]"
+            )
+            return None
+
+        report_data = {
+            'type': 'model_detail',
+            'model_detail': stats,
+        }
+
+        if output_format == "table":
+            self._display_model_detail(stats)
+        elif output_format == "json":
+            return self._format_model_detail_json(stats)
+        elif output_format == "csv":
+            return self._format_model_detail_csv(stats)
+
+        return report_data
+
+    def _display_model_detail(self, stats):
+        """Display model detail panel and tool table."""
+        from ..models.analytics import ModelDetailStats
+
+        panel = self.table_formatter.create_model_detail_panel(stats)
+        self.console.print(panel)
+
+        if stats.tool_stats:
+            tool_table = self.table_formatter.create_model_tool_table(
+                stats.tool_stats, stats.model_name
+            )
+            self.console.print(tool_table)
+
+            # Tool summary line
+            summary = stats.tool_summary
+            self.console.print(
+                f"\n[metric.label]Total tool calls:[/metric.label] "
+                f"[metric.value]{summary.total_calls:,}[/metric.value]  "
+                f"[status.success]{summary.total_success:,} succeeded[/status.success]  "
+                f"[status.error]{summary.total_failures:,} failed[/status.error]  "
+                f"[metric.label]Overall:[/metric.label] "
+                f"[metric.value]{summary.overall_success_rate:.0f}%[/metric.value]"
+            )
+
+    def _format_model_detail_json(self, stats) -> Dict[str, Any]:
+        """Format model detail as JSON."""
+        return {
+            'model_name': stats.model_name,
+            'first_used': stats.first_used.isoformat() if stats.first_used else None,
+            'last_used': stats.last_used.isoformat() if stats.last_used else None,
+            'total_sessions': stats.total_sessions,
+            'total_days_used': stats.total_days_used,
+            'total_interactions': stats.total_interactions,
+            'tokens': stats.total_tokens.model_dump(),
+            'total_cost': float(stats.total_cost),
+            'avg_cost_per_day': float(stats.avg_cost_per_day),
+            'avg_cost_per_session': float(stats.avg_cost_per_session),
+            'p50_output_rate': stats.p50_output_rate,
+            'tool_stats': [
+                {
+                    'tool_name': t.tool_name,
+                    'total_calls': t.total_calls,
+                    'success_count': t.success_count,
+                    'failure_count': t.failure_count,
+                    'success_rate': t.success_rate,
+                }
+                for t in stats.tool_stats
+            ],
+            'tool_summary': {
+                'total_calls': stats.tool_summary.total_calls,
+                'total_success': stats.tool_summary.total_success,
+                'total_failures': stats.tool_summary.total_failures,
+                'overall_success_rate': stats.tool_summary.overall_success_rate,
+            },
+        }
+
+    def _format_model_detail_csv(self, stats) -> List[Dict[str, Any]]:
+        """Format model detail as CSV rows (one row per tool)."""
+        if not stats.tool_stats:
+            return [{
+                'model_name': stats.model_name,
+                'total_sessions': stats.total_sessions,
+                'total_days_used': stats.total_days_used,
+                'total_interactions': stats.total_interactions,
+                'input_tokens': stats.total_tokens.input,
+                'output_tokens': stats.total_tokens.output,
+                'cache_read_tokens': stats.total_tokens.cache_read,
+                'cache_write_tokens': stats.total_tokens.cache_write,
+                'total_cost': float(stats.total_cost),
+                'avg_cost_per_day': float(stats.avg_cost_per_day),
+                'avg_cost_per_session': float(stats.avg_cost_per_session),
+                'p50_output_rate': stats.p50_output_rate,
+                'tool_name': '',
+                'tool_calls': 0,
+                'tool_success': 0,
+                'tool_failed': 0,
+                'tool_success_rate': 0.0,
+            }]
+
+        rows = []
+        for t in stats.tool_stats:
+            rows.append({
+                'model_name': stats.model_name,
+                'total_sessions': stats.total_sessions,
+                'total_days_used': stats.total_days_used,
+                'total_interactions': stats.total_interactions,
+                'input_tokens': stats.total_tokens.input,
+                'output_tokens': stats.total_tokens.output,
+                'cache_read_tokens': stats.total_tokens.cache_read,
+                'cache_write_tokens': stats.total_tokens.cache_write,
+                'total_cost': float(stats.total_cost),
+                'avg_cost_per_day': float(stats.avg_cost_per_day),
+                'avg_cost_per_session': float(stats.avg_cost_per_session),
+                'p50_output_rate': stats.p50_output_rate,
+                'tool_name': t.tool_name,
+                'tool_calls': t.total_calls,
+                'tool_success': t.success_count,
+                'tool_failed': t.failure_count,
+                'tool_success_rate': t.success_rate,
+            })
+        return rows
+
     def generate_projects_report(self, base_path: str, timeframe: str = "all",
                                start_date: Optional[str] = None, end_date: Optional[str] = None,
                                output_format: str = "table") -> Dict[str, Any]:
@@ -421,7 +597,7 @@ class ReportGenerator:
                     f"[table.row.model]+{workflow.sub_agent_count}[/table.row.model]",
                     f"[status.success]{sum(s.interaction_count for s in workflow.all_sessions)}[/status.success]",
                     f"[table.row.tokens]{workflow.total_tokens.total:,}[/table.row.tokens]",
-                    f"[table.row.cost]${workflow_cost:.2f}[/table.row.cost]",
+                    f"[table.row.cost]{self._fmt_cost(workflow_cost)}[/table.row.cost]",
                     style="table.row.main"
                 )
 
@@ -449,7 +625,7 @@ class ReportGenerator:
                     main.agent or "main",
                     f"{main.interaction_count}",
                     f"{main.total_tokens.total:,}",
-                    f"${main_cost:.2f}",
+                    self._fmt_cost(main_cost),
                     style="table.row.dim"
                 )
 
@@ -479,7 +655,7 @@ class ReportGenerator:
                         sub.agent or "sub",
                         f"{sub.interaction_count}",
                         f"{sub.total_tokens.total:,}",
-                        f"${sub_cost:.2f}",
+                        self._fmt_cost(sub_cost),
                         style="table.row.dim"
                     )
             else:
@@ -510,7 +686,7 @@ class ReportGenerator:
                     main.agent or "-",
                     f"{main.interaction_count}",
                     f"{main.total_tokens.total:,}",
-                    f"${main_cost:.2f}"
+                    self._fmt_cost(main_cost)
                 )
 
         self.console.print(table)
@@ -551,7 +727,7 @@ class ReportGenerator:
                     f"{len(day.sessions)}",
                     f"{day.total_interactions}",
                     f"{day.total_tokens.total:,}",
-                    f"${day_cost:.2f}"
+                    self._fmt_cost(day_cost)
                 )
                 
                 model_breakdown = self._get_model_breakdown_for_sessions(day.sessions)
@@ -561,7 +737,7 @@ class ReportGenerator:
                         f"{model_data['sessions']}",
                         f"{model_data['interactions']}",
                         f"{model_data['tokens']:,}",
-                        f"${model_data['cost']:.2f}",
+                        self._fmt_cost(model_data['cost']),
                         style="table.row.dim"
                     )
             
@@ -605,7 +781,7 @@ class ReportGenerator:
                 f"{week.total_sessions}",
                 f"{week.total_interactions}",
                 f"{week.total_tokens.total:,}",
-                f"${week_cost:.2f}"
+                self._fmt_cost(week_cost)
             )
             
             if breakdown:
@@ -621,7 +797,7 @@ class ReportGenerator:
                         f"{model_data['sessions']}",
                         f"{model_data['interactions']}",
                         f"{model_data['tokens']:,}",
-                        f"${model_data['cost']:.2f}",
+                        self._fmt_cost(model_data['cost']),
                         style="table.row.dim"
                     )
 
@@ -650,7 +826,7 @@ class ReportGenerator:
                 f"{month.total_sessions}",
                 f"{month.total_interactions}",
                 f"{month.total_tokens.total:,}",
-                f"${month_cost:.2f}"
+                self._fmt_cost(month_cost)
             )
             
             if breakdown:
@@ -666,7 +842,7 @@ class ReportGenerator:
                         f"{model_data['sessions']}",
                         f"{model_data['interactions']}",
                         f"{model_data['tokens']:,}",
-                        f"${model_data['cost']:.2f}",
+                        self._fmt_cost(model_data['cost']),
                         style="table.row.dim"
                     )
 
@@ -705,7 +881,7 @@ class ReportGenerator:
                 f"{project.total_sessions}",
                 f"{project.total_interactions}",
                 f"{project.total_tokens.total:,}",
-                f"${project.total_cost:.4f}",
+                self._fmt_cost(project.total_cost),
                 models_display
             )
 
@@ -718,7 +894,7 @@ class ReportGenerator:
             f"[metric.value]{sum(p.total_sessions for p in project_breakdown.project_stats)}[/metric.value] sessions, "
             f"[metric.value]{sum(p.total_interactions for p in project_breakdown.project_stats)}[/metric.value] interactions, "
             f"[metric.tokens]{project_breakdown.total_tokens.total:,}[/metric.tokens] tokens, "
-            f"[metric.cost]${project_breakdown.total_cost:.2f}[/metric.cost]"
+            f"[metric.cost]{self._fmt_cost(project_breakdown.total_cost)}[/metric.cost]"
         )
         summary_panel = Panel(summary_text, title="Summary", border_style="status.success")
         self.console.print(summary_panel)

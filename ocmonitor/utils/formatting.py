@@ -20,22 +20,6 @@ class NumberFormatter:
         return f"{number:,}"
 
     @staticmethod
-    def format_currency(amount: Decimal, currency: str = "USD") -> str:
-        """Format currency amounts.
-
-        Args:
-            amount: Amount to format
-            currency: Currency code (currently only USD supported)
-
-        Returns:
-            Formatted currency string
-        """
-        if currency == "USD":
-            return f"${amount:.4f}"
-        else:
-            return f"{amount:.4f} {currency}"
-
-    @staticmethod
     def format_percentage(value: float, total: float, decimal_places: int = 1) -> str:
         """Format percentage values.
 
@@ -345,4 +329,3 @@ class DataFormatter:
 
         # Fallback to simple truncation
         return TableFormatter.truncate_text(model_name, max_length)
-

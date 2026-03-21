@@ -14,11 +14,13 @@ Welcome to the complete documentation for OpenCode Monitor, a powerful CLI tool 
 4. [Configuration](#configuration)
 5. [Adding New Models](#adding-new-models)
 6. [Remote Pricing Fallback](#remote-pricing-fallback)
-7. [Setting Usage Quotas](#setting-usage-quotas)
-8. [Exporting Reports](#exporting-reports)
-9. [Configuration Commands](#configuration-commands)
-10. [Troubleshooting](#troubleshooting)
-11. [Advanced Tips](#advanced-tips)
+7. [Currency Conversion](#currency-conversion)
+8. [Prometheus Metrics](#prometheus-metrics)
+9. [Setting Usage Quotas](#setting-usage-quotas)
+10. [Exporting Reports](#exporting-reports)
+11. [Configuration Commands](#configuration-commands)
+12. [Troubleshooting](#troubleshooting)
+13. [Advanced Tips](#advanced-tips)
 
 ---
 
@@ -374,6 +376,72 @@ ocmonitor models ~/.local/share/opencode/storage/message --format json
 
 *Click image to view full-size screenshot of model usage analytics*
 
+#### `ocmonitor model <name>`
+Deep-dive detail for a single model. The name is fuzzy-matched against all known model names in the database.
+
+```bash
+# Exact or partial name — fuzzy matched
+ocmonitor model claude-sonnet-4-5
+ocmonitor model sonnet          # lists all matching variants
+ocmonitor model opus -f json    # JSON output
+ocmonitor model nonexistent     # shows "No model found" + available list
+```
+
+**Fuzzy Matching Behavior:**
+
+| Situation | Result |
+|-----------|--------|
+| 0 matches | Shows "No model found" and lists all available model names |
+| 1 match (or exact name) | Displays full detail panel + tool table |
+| >1 matches | Lists candidates with "Did you mean one of these?" |
+
+**Output Layout:**
+
+```
+╭─ Model Detail: claude-sonnet-4-5 ─────────────────────────────╮
+│ First Used      2025-09-15                                      │
+│ Last Used       2026-02-28                                      │
+│ Sessions        42                                              │
+│ Days Used       28                                              │
+│ Interactions    1,247                                           │
+│                                                                 │
+│ Input Tokens    2,451,320                                       │
+│ Output Tokens   489,210                                         │
+│ Cache Read      1,102,400                                       │
+│ Cache Write     312,500                                         │
+│                                                                 │
+│ Total Cost      $47.23                                          │
+│ Avg/Day         $1.69                                           │
+│ Avg/Session     $1.12                                           │
+│                                                                 │
+│ Output Speed    62.4 tok/s (p50)                                │
+╰─────────────────────────────────────────────────────────────────╯
+
+         Tool Usage for claude-sonnet-4-5
+┏━━━━━━━━┳━━━━━━━┳━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━━━┓
+┃ Tool   ┃ Calls ┃ Success ┃ Failed ┃ Success Rate ┃
+┡━━━━━━━━╇━━━━━━━╇━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━━━┩
+│ read   │   620 │     598 │     22 │         96%  │
+│ edit   │   412 │     389 │     23 │         94%  │
+│ bash   │   298 │     285 │     13 │         96%  │
+│ grep   │   156 │     154 │      2 │         99%  │
+│ glob   │   134 │     134 │      0 │        100%  │
+└────────┴───────┴─────────┴────────┴──────────────┘
+
+Total tool calls: 1,620  1,560 succeeded  60 failed  Overall: 96%
+```
+
+**Options:**
+
+| Option | Description | Example |
+|--------|-------------|---------|
+| `--format, -f` | Output format (`table`, `json`, `csv`) | `-f json` |
+
+**Notes:**
+- Requires SQLite database (OpenCode v1.2.0+). File-based storage is not supported for this command.
+- Success rate colors: green ≥90%, yellow ≥70%, red <70%
+- Output speed (p50) excludes tool-call-only interactions and interactions under 100 output tokens
+
 #### `ocmonitor projects <path>`
 Analyze AI usage costs and token consumption by coding project.
 
@@ -442,6 +510,41 @@ ocmonitor live ~/.local/share/opencode/storage/message --refresh 10
 [![Live Dashboard Screenshot](screenshots/live_dashboard.png)](screenshots/live_dashboard.png)
 
 *Click image to view full-size screenshot of the live monitoring dashboard*
+
+### 5. Metrics Commands
+
+#### `ocmonitor metrics [--port] [--host]`
+Start a Prometheus metrics server for Grafana/Prometheus integration.
+
+```bash
+# Start metrics server (default port 9090)
+ocmonitor metrics
+
+# Custom port
+ocmonitor metrics --port 8080
+
+# Custom host
+ocmonitor metrics --host 127.0.0.1
+
+# Scrape metrics
+curl http://localhost:9090/metrics
+```
+
+**Features:**
+- 📊 **Prometheus Format** - Exposes metrics in Prometheus exposition format
+- 🔄 **Real-time Data** - Fresh session data loaded on each scrape
+- 🏷️ **Labeled Metrics** - Per-model and per-project labels for granular queries
+- ⚙️ **Configurable** - Custom host and port via CLI flags or config
+
+**Metrics Exposed:**
+- `ocmonitor_tokens_input_total{model}` - Input tokens per model
+- `ocmonitor_tokens_output_total{model}` - Output tokens per model
+- `ocmonitor_cost_dollars_total{model}` - Total cost per model
+- `ocmonitor_sessions_total{model}` - Session count per model
+- `ocmonitor_session_duration_hours_total` - Total session duration
+- `ocmonitor_sessions_by_project{project}` - Sessions by project
+
+**Note:** Requires `prometheus_client>=0.17.0`. Install with `pip install prometheus_client>=0.17.0`
 
 ---
 
@@ -571,6 +674,30 @@ daily_limits = { claude-sonnet-4 = 10.0, claude-opus-4 = 20.0 }
 monthly_limits = { claude-sonnet-4 = 200.0, claude-opus-4 = 400.0 }
 # Enable quota warnings
 enable_warnings = true
+
+[metrics]
+# Prometheus metrics server configuration
+port = 9090
+host = "0.0.0.0"
+
+[currency]
+# Display currency (ISO 4217 code): USD, GBP, EUR, CNY, JPY, INR, or custom
+code = "USD"
+symbol = "$"
+# Conversion rate from USD (ignored when remote_rates = true)
+rate = 1.0
+# Display format: "symbol_prefix" ($1.23) or "code_suffix" (1.23 USD)
+display_format = "symbol_prefix"
+# Decimal places (auto if not set: JPY=0, most others=2)
+# decimals = 2
+
+# Live rate fetching from frankfurter.dev (free, no API key)
+remote_rates = false
+remote_rates_url = "https://api.frankfurter.dev/v1/latest?base=USD"
+remote_rates_timeout_seconds = 8
+remote_rates_cache_ttl_hours = 24
+remote_rates_cache_path = "~/.cache/ocmonitor/exchange_rates.json"
+allow_stale_rates_on_error = true
 ```
 
 ---
@@ -866,8 +993,285 @@ User overrides have **highest priority** and will overwrite any local or remote 
     "sessionQuota": 0.0,
     "description": "GPT-4o"
   }
+  }
+}
+
+---
+
+## 💱 Currency Conversion
+
+OpenCode Monitor supports displaying costs in your local currency instead of USD. All internal calculations remain in USD; conversion happens only at display and export time.
+
+### Quick Setup
+
+Edit your `~/.config/ocmonitor/config.toml`:
+
+```toml
+[currency]
+code = "GBP"
+symbol = "£"
+rate = 0.79
+```
+
+### Supported Preset Currencies
+
+| Currency | Code | Symbol | Example Rate |
+|----------|------|--------|--------------|
+| US Dollar | USD | $ | 1.00 |
+| British Pound | GBP | £ | 0.79 |
+| Euro | EUR | € | 0.92 |
+| Chinese Yuan | CNY | ¥ | 7.24 |
+| Japanese Yen | JPY | ¥ | 149.50 |
+| Indian Rupee | INR | ₹ | 83.12 |
+
+### Configuration Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `code` | ISO 4217 currency code | `USD` |
+| `symbol` | Currency symbol | `$` |
+| `rate` | Conversion rate from USD | `1.0` |
+| `display_format` | `symbol_prefix` ($1.23) or `code_suffix` (1.23 USD) | `symbol_prefix` |
+| `decimals` | Decimal places (auto if not set) | `null` |
+| `remote_rates` | Enable live rate fetching | `false` |
+| `remote_rates_url` | Exchange rate API endpoint | frankfurter.dev |
+| `remote_rates_timeout_seconds` | API request timeout | `8` |
+| `remote_rates_cache_ttl_hours` | Cache validity period | `24` |
+
+### Display Formats
+
+**Symbol Prefix (default):**
+```toml
+display_format = "symbol_prefix"
+# Output: $1.23, £0.99, €5.50
+```
+
+**Code Suffix:**
+```toml
+display_format = "code_suffix"
+# Output: 1.23 USD, 0.99 GBP, 5.50 EUR
+```
+
+### Zero-Decimal Currencies
+
+Currencies like JPY, KRW, and VND automatically use 0 decimal places unless explicitly configured:
+
+```toml
+[currency]
+code = "JPY"
+symbol = "¥"
+rate = 149.50
+# Output: ¥150 (0 decimals auto-applied)
+```
+
+### Live Exchange Rates
+
+Enable automatic rate fetching from [frankfurter.dev](https://www.frankfurter.dev/) (free, no API key required):
+
+```toml
+[currency]
+code = "EUR"
+symbol = "€"
+remote_rates = true
+remote_rates_timeout_seconds = 8
+remote_rates_cache_ttl_hours = 24
+```
+
+**How it works:**
+1. Checks cache freshness before fetching
+2. Downloads latest rates from frankfurter.dev
+3. Caches results locally (24-hour TTL by default)
+4. Falls back to stale cache if fetch fails
+5. Falls back to configured `rate` if no cache available
+
+**Cache location:** `~/.cache/ocmonitor/exchange_rates.json`
+
+### Exporting with Currency
+
+Exported reports include currency metadata:
+
+**JSON export:**
+```json
+{
+  "metadata": {
+    "currency": {
+      "code": "GBP",
+      "rate": 0.79
+    }
+  }
 }
 ```
+
+**CSV export:**
+```csv
+# Currency: GBP (rate: 0.79 from USD)
+session_id,cost,model
+ses_123,$1.23,claude-sonnet-4
+```
+
+---
+
+## 📊 Prometheus Metrics
+
+OpenCode Monitor now includes a Prometheus metrics endpoint, allowing you to scrape session analytics into Prometheus and visualize them in Grafana.
+
+### What is Prometheus Metrics?
+
+Prometheus is an open-source monitoring system that collects metrics from configured targets. The `ocmonitor metrics` command starts a lightweight HTTP server that exposes session analytics in Prometheus exposition format, enabling real-time monitoring and alerting.
+
+### Starting the Metrics Server
+
+```bash
+# Start metrics server with default settings (port 9090)
+ocmonitor metrics
+
+# Custom port
+ocmonitor metrics --port 8080
+
+# Custom host and port
+ocmonitor metrics --host 127.0.0.1 --port 9090
+```
+
+**Startup Banner:**
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  📊 OpenCode Monitor Metrics Server
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🌐 Endpoint: http://0.0.0.0:9090/metrics
+
+Press Ctrl+C to stop
+```
+
+### Metrics Exposed
+
+All metrics are exposed at `http://localhost:9090/metrics` (or your configured host/port):
+
+| Metric Name | Type | Labels | Description |
+|-------------|------|--------|-------------|
+| `ocmonitor_tokens_input_total` | Gauge | `model` | Total input tokens |
+| `ocmonitor_tokens_output_total` | Gauge | `model` | Total output tokens |
+| `ocmonitor_tokens_cache_read_total` | Gauge | `model` | Total cache read tokens |
+| `ocmonitor_tokens_cache_write_total` | Gauge | `model` | Total cache write tokens |
+| `ocmonitor_cost_dollars_total` | Gauge | `model` | Total cost in USD |
+| `ocmonitor_sessions_total` | Gauge | `model` | Total number of sessions |
+| `ocmonitor_interactions_total` | Gauge | `model` | Total number of interactions |
+| `ocmonitor_output_rate_tokens_per_second` | Gauge | `model` | P50 output rate (tok/s) |
+| `ocmonitor_session_duration_hours_total` | Gauge | _(none)_ | Total session duration across all models |
+| `ocmonitor_sessions_by_project` | Gauge | `project` | Sessions grouped by project |
+
+### Scraping Metrics
+
+**Using curl:**
+```bash
+curl http://localhost:9090/metrics
+```
+
+**Sample output:**
+```
+# HELP ocmonitor_tokens_input_total Total input tokens
+# TYPE ocmonitor_tokens_input_total gauge
+ocmonitor_tokens_input_total{model="claude-sonnet-4-20250514"} 2451320.0
+ocmonitor_tokens_input_total{model="claude-opus-4"} 892340.0
+
+# HELP ocmonitor_cost_dollars_total Total cost in USD
+# TYPE ocmonitor_cost_dollars_total gauge
+ocmonitor_cost_dollars_total{model="claude-sonnet-4-20250514"} 47.23
+ocmonitor_cost_dollars_total{model="claude-opus-4"} 89.45
+
+# HELP ocmonitor_session_duration_hours_total Total session duration in hours
+# TYPE ocmonitor_session_duration_hours_total gauge
+ocmonitor_session_duration_hours_total 142.5
+```
+
+### Prometheus Configuration
+
+Add ocmonitor to your `prometheus.yml`:
+
+```yaml
+scrape_configs:
+  - job_name: 'ocmonitor'
+    static_configs:
+      - targets: ['localhost:9090']
+    scrape_interval: 30s
+```
+
+### Grafana Dashboard
+
+Create a simple Grafana dashboard with PromQL queries:
+
+**Total Cost by Model:**
+```promql
+ocmonitor_cost_dollars_total
+```
+
+**Total Tokens Over Time:**
+```promql
+sum(ocmonitor_tokens_input_total) + sum(ocmonitor_tokens_output_total)
+```
+
+**Sessions by Project:**
+```promql
+ocmonitor_sessions_by_project
+```
+
+### Configuration
+
+Add to `~/.config/ocmonitor/config.toml`:
+
+```toml
+[metrics]
+port = 9090
+host = "0.0.0.0"
+```
+
+**Environment Variables:**
+```bash
+export OCMONITOR_METRICS_PORT=9090
+export OCMONITOR_METRICS_HOST=0.0.0.0
+```
+
+### How It Works
+
+The metrics server uses Prometheus's **Custom Collector** pattern:
+
+1. **On each scrape**, the `collect()` method is called
+2. **Fresh data is loaded** from the SQLite database
+3. **Metrics are computed** using the existing SessionAnalyzer
+4. **GaugeMetricFamily objects** are yielded with current values
+
+This design ensures:
+- ✅ No background threads or polling
+- ✅ Prometheus controls data freshness via scrape interval
+- ✅ Always reflects the latest session data
+- ✅ Graceful degradation on errors (returns zero-valued metrics)
+
+### Dependencies
+
+The metrics feature requires `prometheus_client`:
+
+```bash
+# Install with metrics support
+pip install "ocmonitor[metrics]"
+
+# Or manually
+pip install prometheus_client>=0.17.0
+```
+
+### Troubleshooting
+
+**Port already in use:**
+```bash
+ocmonitor metrics --port 8080  # Use a different port
+```
+
+**Missing dependency:**
+```bash
+pip install prometheus_client>=0.17.0
+```
+
+**Graceful shutdown:**
+Press `Ctrl+C` to stop the server cleanly.
 
 ---
 

@@ -1,10 +1,12 @@
 """Command line interface for OpenCode Monitor."""
 
+import errno
 import json
+from contextlib import contextmanager
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import click
 from rich.console import Console
@@ -35,6 +37,121 @@ def json_serializer(obj):
         return str(obj)
 
 
+@contextmanager
+def cli_error_context(ctx: click.Context, operation_name: str):
+    """Context manager for consistent CLI error handling across all commands.
+    
+    Usage:
+        with cli_error_context(ctx, "analyzing sessions"):
+            result = perform_operation()
+    
+    Args:
+        ctx: Click context object containing verbose flag
+        operation_name: Human-readable description of the operation (for error messages)
+    """
+    try:
+        yield
+    except click.exceptions.Exit:
+        raise
+    except Exception as e:
+        error_msg = create_user_friendly_error(e)
+        click.echo(f"Error {operation_name}: {error_msg}", err=True)
+        if ctx.obj.get("verbose"):
+            click.echo(f"Details: {str(e)}", err=True)
+        ctx.exit(1)
+
+
+def handle_output_format(result: Any, output_format: str) -> None:
+    """Handle output formatting for CLI results.
+    
+    Centralizes JSON/CSV/table output logic used across multiple commands.
+    
+    Args:
+        result: The result data to output
+        output_format: One of 'json', 'csv', or 'table'
+    """
+    if output_format == "json":
+        click.echo(json.dumps(result, indent=2, default=json_serializer))
+    elif output_format == "csv":
+        click.echo(
+            "CSV data would be exported to file. Use 'export' command for file output."
+        )
+
+
+def resolve_path(path: Optional[str], default_to_messages_dir: bool = True) -> str:
+    """Resolve path with appropriate default fallback.
+    
+    Args:
+        path: User-provided path or None
+        default_to_messages_dir: If True, default to messages_dir; otherwise use cwd
+        
+    Returns:
+        Resolved path string
+    """
+    if path:
+        return path
+    
+    cfg = config_manager.config
+    if default_to_messages_dir:
+        return cfg.paths.messages_dir
+    
+    return str(Path.cwd())
+
+
+# Sentinel for path placeholder in report method map
+_PATH_PLACEHOLDER = object()
+
+# Module-level constant mapping report types to generator methods and parameters
+_REPORT_METHOD_MAP = {
+    "session": {
+        "method": "generate_single_session_report",
+        "params": {"path": _PATH_PLACEHOLDER, "output_format": "json"},
+    },
+    "sessions": {
+        "method": "generate_sessions_summary_report",
+        "params": {"base_path": _PATH_PLACEHOLDER, "limit": None, "output_format": "table"},
+    },
+    "daily": {
+        "method": "generate_daily_report",
+        "params": {"base_path": _PATH_PLACEHOLDER, "month": None, "output_format": "table"},
+    },
+    "weekly": {
+        "method": "generate_weekly_report",
+        "params": {
+            "base_path": _PATH_PLACEHOLDER,
+            "year": None,
+            "output_format": "table",
+            "breakdown": False,
+            "week_start_day": 0,
+        },
+    },
+    "monthly": {
+        "method": "generate_monthly_report",
+        "params": {"base_path": _PATH_PLACEHOLDER, "year": None, "output_format": "table"},
+    },
+    "models": {
+        "method": "generate_models_report",
+        "params": {
+            "base_path": _PATH_PLACEHOLDER,
+            "timeframe": "all",
+            "start_date": None,
+            "end_date": None,
+            "output_format": "table",
+        },
+    },
+    "projects": {
+        "method": "generate_projects_report",
+        "params": {
+            "base_path": _PATH_PLACEHOLDER,
+            "timeframe": "all",
+            "start_date": None,
+            "end_date": None,
+            "output_format": "table",
+        },
+    },
+}
+
+
 @click.group()
 @click.version_option(version=__version__)
 @click.option(
@@ -45,10 +162,30 @@ def json_serializer(obj):
 )
 @click.option("--verbose", "-v", is_flag=True, help="Enable verbose output")
 @click.option(
-    "--no-remote", is_flag=True, help="Disable remote pricing fallback (local-only mode)"
+    "--no-remote-pricing",
+    is_flag=True,
+    help="Disable remote pricing fallback (local-only pricing)",
+)
+@click.option(
+    "--no-remote-rates",
+    is_flag=True,
+    help="Disable remote FX rate fetching (use configured currency rate)",
+)
+@click.option(
+    "--no-remote",
+    is_flag=True,
+    help="Deprecated: disable all remote lookups (pricing and FX rates)",
 )
 @click.pass_context
-def cli(ctx: click.Context, config: Optional[str], theme: Optional[str], verbose: bool, no_remote: bool):
+def cli(
+    ctx: click.Context,
+    config: Optional[str],
+    theme: Optional[str],
+    verbose: bool,
+    no_remote_pricing: bool,
+    no_remote_rates: bool,
+    no_remote: bool,
+):
     """OpenCode Monitor - Analytics and monitoring for OpenCode sessions.
 
     Monitor token usage, costs, and performance metrics from your OpenCode
@@ -71,11 +208,29 @@ def cli(ctx: click.Context, config: Optional[str], theme: Optional[str], verbose
         if theme:
             cfg.ui.theme = theme
         
-        # Store no_remote flag in context for later use
-        ctx.obj["no_remote"] = no_remote
+        # Resolve deprecated flag to the new split flags
+        if no_remote:
+            no_remote_pricing = True
+            no_remote_rates = True
+
+        # Store flags in context for later use
+        ctx.obj["no_remote_pricing"] = no_remote_pricing
+        ctx.obj["no_remote_rates"] = no_remote_rates
             
         ctx.obj["config"] = cfg
-        ctx.obj["pricing_data"] = config_manager.load_pricing_data(no_remote=no_remote)
+        ctx.obj["pricing_data"] = config_manager.load_pricing_data(
+            no_remote=no_remote_pricing
+        )
+
+        # Resolve currency
+        currency_cfg = cfg.currency
+        resolved_rate = None
+        if currency_cfg.remote_rates and not no_remote_rates:
+            from .services.rate_fetcher import get_exchange_rate
+            resolved_rate = get_exchange_rate(currency_cfg)
+        from .utils.currency import CurrencyConverter
+        currency_converter = CurrencyConverter.from_config(currency_cfg, resolved_rate)
+        ctx.obj["currency_converter"] = currency_converter
 
         # Initialize Console with the configured theme
         theme_name = cfg.ui.theme
@@ -86,10 +241,10 @@ def cli(ctx: click.Context, config: Optional[str], theme: Optional[str], verbose
         # Initialize services
         analyzer = SessionAnalyzer(ctx.obj["pricing_data"])
         ctx.obj["analyzer"] = analyzer
-        ctx.obj["report_generator"] = ReportGenerator(analyzer, console)
-        ctx.obj["export_service"] = ExportService(cfg.paths.export_dir)
+        ctx.obj["report_generator"] = ReportGenerator(analyzer, console, currency_converter)
+        ctx.obj["export_service"] = ExportService(cfg.paths.export_dir, currency_converter)
         ctx.obj["live_monitor"] = LiveMonitor(
-            ctx.obj["pricing_data"], console, paths_config=cfg.paths
+            ctx.obj["pricing_data"], console, paths_config=cfg.paths, currency_converter=currency_converter
         )
 
     except Exception as e:
@@ -116,10 +271,9 @@ def session(ctx: click.Context, path: Optional[str], output_format: str):
 
     PATH: Path to session directory (defaults to current directory)
     """
-    if not path:
-        path = str(Path.cwd())
+    path = resolve_path(path, default_to_messages_dir=False)
 
-    try:
+    with cli_error_context(ctx, "analyzing session"):
         report_generator = ctx.obj["report_generator"]
         result = report_generator.generate_single_session_report(path, output_format)
 
@@ -129,19 +283,7 @@ def session(ctx: click.Context, path: Optional[str], output_format: str):
             )
             ctx.exit(1)
 
-        if output_format == "json":
-            click.echo(json.dumps(result, indent=2, default=json_serializer))
-        elif output_format == "csv":
-            click.echo(
-                "CSV data would be exported to file. Use 'export' command for file output."
-            )
-
-    except Exception as e:
-        error_msg = create_user_friendly_error(e)
-        click.echo(f"Error analyzing session: {error_msg}", err=True)
-        if ctx.obj["verbose"]:
-            click.echo(f"Details: {str(e)}", err=True)
-        ctx.exit(1)
+        handle_output_format(result, output_format)
 
 
 @cli.command()
@@ -186,7 +328,7 @@ def sessions(
     config = ctx.obj["config"]
     console = ctx.obj["console"]
 
-    try:
+    with cli_error_context(ctx, "analyzing sessions"):
         analyzer = ctx.obj["analyzer"]
         report_generator = ctx.obj["report_generator"]
 
@@ -209,19 +351,105 @@ def sessions(
             path, limit, output_format, group_workflows=not no_group
         )
 
-        if output_format == "json":
-            click.echo(json.dumps(result, indent=2, default=json_serializer))
-        elif output_format == "csv":
-            click.echo(
-                "CSV data would be exported to file. Use 'export' command for file output."
-            )
+        handle_output_format(result, output_format)
 
-    except Exception as e:
-        error_msg = create_user_friendly_error(e)
-        click.echo(f"Error analyzing sessions: {error_msg}", err=True)
-        if ctx.obj["verbose"]:
-            click.echo(f"Details: {str(e)}", err=True)
+
+def _determine_monitoring_source(source: str, validation: dict) -> tuple[bool, bool]:
+    """Determine which monitoring source to use based on validation and user preference.
+    
+    Args:
+        source: User-specified source preference ("auto", "sqlite", or "files")
+        validation: Validation result dict containing availability info
+        
+    Returns:
+        Tuple of (use_sqlite, use_files) booleans
+    """
+    sqlite_available = validation["info"]["sqlite"]["available"]
+    files_available = validation["info"]["files"].get("available", False)
+    
+    use_sqlite = (source == "sqlite") or (source == "auto" and sqlite_available)
+    use_files = (source == "files") or (source == "auto" and not sqlite_available and files_available)
+    
+    return use_sqlite, use_files
+
+
+def _prompt_workflow_selection(
+    live_monitor: LiveMonitor,
+    use_sqlite: bool,
+    use_files: bool,
+    sqlite_available: bool,
+    files_available: bool,
+    path: Optional[str],
+    session_id: Optional[str],
+    pick: bool,
+    console,
+    config,
+) -> tuple[Optional[str], str]:
+    """Prompt user to select a workflow for monitoring.
+    
+    Args:
+        live_monitor: LiveMonitor instance
+        use_sqlite: Whether to use SQLite mode
+        use_files: Whether to use file-based mode
+        sqlite_available: Whether SQLite is available
+        files_available: Whether file-based storage is available
+        path: Path to session folders (for file mode)
+        session_id: Pre-selected session ID (if any)
+        pick: Whether to prompt for workflow selection
+        console: Rich console instance
+        config: Configuration instance
+        
+    Returns:
+        Tuple of (selected_session_id, mode) where mode is "sqlite", "files",
+        "cancelled" (user dismissed picker), or "" (no data source available).
+        selected_session_id may be None for auto-detect mode (no --pick, no --session-id).
+    """
+    selected_session_id = session_id
+
+    if use_sqlite and sqlite_available:
+        if pick and not selected_session_id:
+            selected_session_id = live_monitor.pick_sqlite_workflow()
+            if not selected_session_id:
+                console.print("[status.warning]No workflow selected. Exiting.[/status.warning]")
+                return None, "cancelled"
+        return selected_session_id, "sqlite"
+
+    elif use_files and files_available:
+        if not path:
+            path = config.paths.messages_dir
+        if pick and not selected_session_id:
+            assert path is not None
+            selected_session_id = live_monitor.pick_file_workflow(path)
+            if not selected_session_id:
+                console.print("[status.warning]No workflow selected. Exiting.[/status.warning]")
+                return None, "cancelled"
+        return selected_session_id, "files"
+
+    return None, ""
+
+
+def _display_validation_results(console, validation: dict, ctx) -> bool:
+    """Display validation results and exit if critical errors found.
+    
+    Args:
+        console: Rich console instance
+        validation: Validation result dict
+        ctx: Click context for exiting
+        
+    Returns:
+        True if validation passed, False if ctx.exit was called
+    """
+    if not validation["valid"]:
+        for issue in validation["issues"]:
+            console.print(f"[status.error]Error: {issue}[/status.error]")
         ctx.exit(1)
+        return False
+    
+    if validation["warnings"]:
+        for warning in validation["warnings"]:
+            console.print(f"[status.warning]Warning: {warning}[/status.warning]")
+    
+    return True
 
 
 @cli.command()
@@ -230,6 +458,21 @@ def sessions(
     "--interval", "-i", type=int, default=None, help="Update interval in seconds"
 )
 @click.option("--no-color", is_flag=True, help="Disable colored output")
+@click.option(
+    "--pick",
+    is_flag=True,
+    help="Interactively choose a session/workflow before starting (also enables live switching)",
+)
+@click.option(
+    "--session-id",
+    type=str,
+    help="Track a specific session/workflow ID (main or sub-agent)",
+)
+@click.option(
+    "--interactive-switch",
+    is_flag=True,
+    help="Enable in-dashboard workflow switching controls (experimental)",
+)
 @click.option(
     "--source", "-s",
     type=click.Choice(["auto", "sqlite", "files"]),
@@ -242,7 +485,10 @@ def live(
     path: Optional[str],
     interval: Optional[int],
     no_color: bool,
-    source: str
+    pick: bool,
+    session_id: Optional[str],
+    interactive_switch: bool,
+    source: str,
 ):
     """Start live dashboard for monitoring the current workflow.
 
@@ -264,40 +510,60 @@ def live(
 
     try:
         live_monitor = ctx.obj["live_monitor"]
+        interactive_switch = interactive_switch or pick
 
         # Validate monitoring setup
         validation = live_monitor.validate_monitoring_setup(path if path else None)
-        if not validation["valid"]:
-            for issue in validation["issues"]:
-                console.print(f"[status.error]Error: {issue}[/status.error]")
-            ctx.exit(1)
+        if not _display_validation_results(console, validation, ctx):
+            return
 
-        if validation["warnings"]:
-            for warning in validation["warnings"]:
-                console.print(f"[status.warning]Warning: {warning}[/status.warning]")
-
-        # Determine data source
         sqlite_available = validation["info"]["sqlite"]["available"]
         files_available = validation["info"]["files"].get("available", False)
-
+        
         # Determine which monitoring method to use
-        use_sqlite = (source == "sqlite") or (source == "auto" and sqlite_available)
-        use_files = (source == "files") or (source == "auto" and not sqlite_available and files_available)
+        use_sqlite, use_files = _determine_monitoring_source(source, validation)
+        
+        # Prompt for workflow selection
+        selected_session_id, mode = _prompt_workflow_selection(
+            live_monitor,
+            use_sqlite,
+            use_files,
+            sqlite_available,
+            files_available,
+            path,
+            session_id,
+            pick,
+            console,
+            config,
+        )
+        
+        if mode == "":
+            console.print("[status.error]No data source available. Please check OpenCode installation.[/status.error]")
+            ctx.exit(1)
+            return
 
-        if use_sqlite and sqlite_available:
-            # Use SQLite workflow monitoring (v1.2.0+)
-            live_monitor.start_sqlite_workflow_monitoring(interval)
-        elif use_files and files_available:
-            # Use file-based workflow monitoring (legacy)
+        if mode == "cancelled":
+            return
+
+        # Start monitoring based on selected mode
+        if mode == "sqlite":
+            live_monitor.start_sqlite_workflow_monitoring(
+                interval,
+                selected_session_id=selected_session_id,
+                interactive_switch=interactive_switch,
+            )
+        elif mode == "files":
             if not path:
                 path = config.paths.messages_dir
             console.print("[status.success]Starting workflow live dashboard (legacy file mode)[/status.success]")
             console.print(f"[status.info]Monitoring: {path}[/status.info]")
             console.print(f"[status.info]Update interval: {interval}s[/status.info]")
-            live_monitor.start_monitoring(path, interval)
-        else:
-            console.print("[status.error]No data source available. Please check OpenCode installation.[/status.error]")
-            ctx.exit(1)
+            live_monitor.start_monitoring(
+                path,
+                interval,
+                selected_session_id=selected_session_id,
+                interactive_switch=interactive_switch,
+            )
 
     except KeyboardInterrupt:
         console.print("\n[status.warning]Live monitoring stopped.[/status.warning]")
@@ -334,30 +600,15 @@ def daily(
     PATH: Path to directory containing session folders
           (defaults to configured messages directory)
     """
-    config = ctx.obj["config"]
+    path = resolve_path(path, default_to_messages_dir=True)
 
-    if not path:
-        path = config.paths.messages_dir
-
-    try:
+    with cli_error_context(ctx, "generating daily breakdown"):
         report_generator = ctx.obj["report_generator"]
         result = report_generator.generate_daily_report(
             path, month, output_format, breakdown
         )
 
-        if output_format == "json":
-            click.echo(json.dumps(result, indent=2, default=json_serializer))
-        elif output_format == "csv":
-            click.echo(
-                "CSV data would be exported to file. Use 'export' command for file output."
-            )
-
-    except Exception as e:
-        error_msg = create_user_friendly_error(e)
-        click.echo(f"Error generating daily breakdown: {error_msg}", err=True)
-        if ctx.obj["verbose"]:
-            click.echo(f"Details: {str(e)}", err=True)
-        ctx.exit(1)
+        handle_output_format(result, output_format)
 
 
 @cli.command()
@@ -400,35 +651,20 @@ def weekly(
         ocmonitor weekly --start-day sunday # Sunday to Sunday weeks
         ocmonitor weekly --start-day friday # Friday to Friday weeks
     """
-    config = ctx.obj["config"]
-
-    if not path:
-        path = config.paths.messages_dir
+    path = resolve_path(path, default_to_messages_dir=True)
 
     # Convert day name to weekday number
     from .utils.time_utils import WEEKDAY_MAP
 
     week_start_day = WEEKDAY_MAP[start_day.lower()]
 
-    try:
+    with cli_error_context(ctx, "generating weekly breakdown"):
         report_generator = ctx.obj["report_generator"]
         result = report_generator.generate_weekly_report(
             path, year, output_format, breakdown, week_start_day
         )
 
-        if output_format == "json":
-            click.echo(json.dumps(result, indent=2, default=json_serializer))
-        elif output_format == "csv":
-            click.echo(
-                "CSV data would be exported to file. Use 'export' command for file output."
-            )
-
-    except Exception as e:
-        error_msg = create_user_friendly_error(e)
-        click.echo(f"Error generating weekly breakdown: {error_msg}", err=True)
-        if ctx.obj["verbose"]:
-            click.echo(f"Details: {str(e)}", err=True)
-        ctx.exit(1)
+        handle_output_format(result, output_format)
 
 
 @cli.command()
@@ -456,30 +692,44 @@ def monthly(
     PATH: Path to directory containing session folders
           (defaults to configured messages directory)
     """
-    config = ctx.obj["config"]
+    path = resolve_path(path, default_to_messages_dir=True)
 
-    if not path:
-        path = config.paths.messages_dir
-
-    try:
+    with cli_error_context(ctx, "generating monthly breakdown"):
         report_generator = ctx.obj["report_generator"]
         result = report_generator.generate_monthly_report(
             path, year, output_format, breakdown
         )
 
-        if output_format == "json":
-            click.echo(json.dumps(result, indent=2, default=json_serializer))
-        elif output_format == "csv":
-            click.echo(
-                "CSV data would be exported to file. Use 'export' command for file output."
-            )
+        handle_output_format(result, output_format)
 
-    except Exception as e:
-        error_msg = create_user_friendly_error(e)
-        click.echo(f"Error generating monthly breakdown: {error_msg}", err=True)
-        if ctx.obj["verbose"]:
-            click.echo(f"Details: {str(e)}", err=True)
-        ctx.exit(1)
+
+@cli.command()
+@click.argument("name")
+@click.option(
+    "--format",
+    "-f",
+    "output_format",
+    type=click.Choice(["table", "json", "csv"]),
+    default="table",
+    help="Output format",
+)
+@click.pass_context
+def model(ctx: click.Context, name: str, output_format: str):
+    """Show detailed breakdown for a specific model.
+
+    NAME: Model name or partial name (fuzzy matched)
+
+    Examples:
+        ocmonitor model claude-sonnet-4-5
+        ocmonitor model sonnet
+        ocmonitor model opus -f json
+    """
+    with cli_error_context(ctx, "generating model detail"):
+        report_generator = ctx.obj["report_generator"]
+        result = report_generator.generate_model_detail_report(name, output_format)
+
+        if result:
+            handle_output_format(result, output_format)
 
 
 @cli.command()
@@ -514,30 +764,15 @@ def models(
     PATH: Path to directory containing session folders
           (defaults to configured messages directory)
     """
-    config = ctx.obj["config"]
+    path = resolve_path(path, default_to_messages_dir=True)
 
-    if not path:
-        path = config.paths.messages_dir
-
-    try:
+    with cli_error_context(ctx, "generating model breakdown"):
         report_generator = ctx.obj["report_generator"]
         result = report_generator.generate_models_report(
             path, timeframe, start_date, end_date, output_format
         )
 
-        if output_format == "json":
-            click.echo(json.dumps(result, indent=2, default=json_serializer))
-        elif output_format == "csv":
-            click.echo(
-                "CSV data would be exported to file. Use 'export' command for file output."
-            )
-
-    except Exception as e:
-        error_msg = create_user_friendly_error(e)
-        click.echo(f"Error generating model breakdown: {error_msg}", err=True)
-        if ctx.obj["verbose"]:
-            click.echo(f"Details: {str(e)}", err=True)
-        ctx.exit(1)
+        handle_output_format(result, output_format)
 
 
 @cli.command()
@@ -572,30 +807,65 @@ def projects(
     PATH: Path to directory containing session folders
           (defaults to configured messages directory)
     """
-    config = ctx.obj["config"]
+    path = resolve_path(path, default_to_messages_dir=True)
 
-    if not path:
-        path = config.paths.messages_dir
-
-    try:
+    with cli_error_context(ctx, "generating project breakdown"):
         report_generator = ctx.obj["report_generator"]
         result = report_generator.generate_projects_report(
             path, timeframe, start_date, end_date, output_format
         )
 
-        if output_format == "json":
-            click.echo(json.dumps(result, indent=2, default=json_serializer))
-        elif output_format == "csv":
-            click.echo(
-                "CSV data would be exported to file. Use 'export' command for file output."
-            )
+        handle_output_format(result, output_format)
 
-    except Exception as e:
-        error_msg = create_user_friendly_error(e)
-        click.echo(f"Error generating project breakdown: {error_msg}", err=True)
-        if ctx.obj["verbose"]:
-            click.echo(f"Details: {str(e)}", err=True)
-        ctx.exit(1)
+
+def _generate_export_report(report_type: str, path: Optional[str], report_generator) -> Optional[dict]:
+    """Generate report data for export based on report type.
+    
+    Args:
+        report_type: Type of report to generate
+        path: Path to analyze
+        report_generator: ReportGenerator instance
+        
+    Returns:
+        Report data dictionary or None if report type is invalid
+    """
+    if report_type not in _REPORT_METHOD_MAP:
+        return None
+    
+    report_config = _REPORT_METHOD_MAP[report_type]
+    method_name = report_config["method"]
+    params = report_config["params"].copy()
+    
+    # Replace path placeholders with actual path value
+    for key in params:
+        if params[key] is _PATH_PLACEHOLDER:
+            params[key] = path
+    
+    # Get the method from report_generator and call it with unpacked params
+    method = getattr(report_generator, method_name)
+    return method(**params)
+
+
+def _display_export_summary(
+    console, 
+    output_path: str, 
+    export_service, 
+    report_type: str
+) -> None:
+    """Display export completion summary.
+    
+    Args:
+        console: Rich console instance
+        output_path: Path to the exported file
+        export_service: ExportService instance
+        report_type: Type of report that was exported
+    """
+    summary = export_service.get_export_summary(output_path)
+    console.print(f"[status.success]✅ Export completed successfully![/status.success]")
+    console.print(f"[metric.label]File:[/metric.label] [metric.value]{output_path}[/metric.value]")
+    console.print(f"[metric.label]Size:[/metric.label] [metric.value]{summary.get('size_human', 'Unknown')}[/metric.value]")
+    if "rows" in summary:
+        console.print(f"[metric.label]Rows:[/metric.label] [metric.value]{summary['rows']}[/metric.value]")
 
 
 @cli.command()
@@ -632,44 +902,17 @@ def export(
     config = ctx.obj["config"]
     console = ctx.obj["console"]
 
-    if not path:
-        path = config.paths.messages_dir
+    path = resolve_path(path, default_to_messages_dir=True)
 
     if not export_format:
         export_format = config.export.default_format
 
-    try:
+    with cli_error_context(ctx, "exporting data"):
         report_generator = ctx.obj["report_generator"]
         export_service = ctx.obj["export_service"]
 
-        # Generate report data
-        report_data = None
-        if report_type == "session":
-            report_data = report_generator.generate_single_session_report(path, "json")
-        elif report_type == "sessions":
-            report_data = report_generator.generate_sessions_summary_report(
-                path, None, "table"
-            )  # Use 'table' to get raw data
-        elif report_type == "daily":
-            report_data = report_generator.generate_daily_report(
-                path, None, "table"
-            )  # Use 'table' to get raw data
-        elif report_type == "weekly":
-            report_data = report_generator.generate_weekly_report(
-                path, None, "table", False, 0
-            )  # Use 'table' to get raw data, Monday start
-        elif report_type == "monthly":
-            report_data = report_generator.generate_monthly_report(
-                path, None, "table"
-            )  # Use 'table' to get raw data
-        elif report_type == "models":
-            report_data = report_generator.generate_models_report(
-                path, "all", None, None, "table"
-            )  # Use 'table' to get raw data
-        elif report_type == "projects":
-            report_data = report_generator.generate_projects_report(
-                path, "all", None, None, "table"
-            )  # Use 'table' to get raw data
+        # Generate report data using method mapping
+        report_data = _generate_export_report(report_type, path, report_generator)
 
         if not report_data:
             console.print("[status.error]No data to export.[/status.error]")
@@ -684,20 +927,8 @@ def export(
             config.export.include_metadata,
         )
 
-        # Get export summary
-        summary = export_service.get_export_summary(output_path)
-        console.print(f"[status.success]✅ Export completed successfully![/status.success]")
-        console.print(f"[metric.label]File:[/metric.label] [metric.value]{output_path}[/metric.value]")
-        console.print(f"[metric.label]Size:[/metric.label] [metric.value]{summary.get('size_human', 'Unknown')}[/metric.value]")
-        if "rows" in summary:
-            console.print(f"[metric.label]Rows:[/metric.label] [metric.value]{summary['rows']}[/metric.value]")
-
-    except Exception as e:
-        error_msg = create_user_friendly_error(e)
-        click.echo(f"Error exporting data: {error_msg}", err=True)
-        if ctx.obj["verbose"]:
-            click.echo(f"Details: {str(e)}", err=True)
-        ctx.exit(1)
+        # Display export summary
+        _display_export_summary(console, output_path, export_service, report_type)
 
 
 @cli.group()
@@ -710,7 +941,7 @@ def config():
 @click.pass_context
 def config_show(ctx: click.Context):
     """Show current configuration."""
-    try:
+    with cli_error_context(ctx, "showing configuration"):
         config = ctx.obj["config"]
         pricing_data = ctx.obj["pricing_data"]
         console = ctx.obj["console"]
@@ -718,6 +949,7 @@ def config_show(ctx: click.Context):
         console.print("[table.title]📋 Current Configuration:[/table.title]")
         console.print()
         console.print("[table.header]📁 Paths:[/table.header]")
+        console.print(f"  [metric.label]Database file:[/metric.label] [metric.value]{config.paths.database_file}[/metric.value]")
         console.print(f"  [metric.label]Messages directory:[/metric.label] [metric.value]{config.paths.messages_dir}[/metric.value]")
         console.print(f"  [metric.label]Export directory:[/metric.label] [metric.value]{config.paths.export_dir}[/metric.value]")
         console.print()
@@ -732,14 +964,19 @@ def config_show(ctx: click.Context):
         console.print(f"  [metric.label]Default format:[/metric.label] [metric.value]{config.export.default_format}[/metric.value]")
         console.print(f"  [metric.label]Include metadata:[/metric.label] [metric.value]{config.export.include_metadata}[/metric.value]")
         console.print()
+        console.print("[table.header]💱 Currency:[/table.header]")
+        console.print(f"  [metric.label]Code:[/metric.label] [metric.value]{config.currency.code}[/metric.value]")
+        console.print(f"  [metric.label]Symbol:[/metric.label] [metric.value]{config.currency.symbol}[/metric.value]")
+        console.print(f"  [metric.label]Rate (from USD):[/metric.label] [metric.value]{config.currency.rate}[/metric.value]")
+        console.print(f"  [metric.label]Display format:[/metric.label] [metric.value]{config.currency.display_format}[/metric.value]")
+        decimals_display = "auto" if config.currency.decimals is None else config.currency.decimals
+        console.print(f"  [metric.label]Decimals:[/metric.label] [metric.value]{decimals_display}[/metric.value]")
+        console.print(f"  [metric.label]Remote rates:[/metric.label] [metric.value]{config.currency.remote_rates}[/metric.value]")
+        console.print()
         console.print("[table.header]🤖 Models:[/table.header]")
         console.print(f"  [metric.label]Configured models:[/metric.label] [metric.value]{len(pricing_data)}[/metric.value]")
         for model_name in sorted(pricing_data.keys()):
             console.print(f"    - [table.row.model]{model_name}[/table.row.model]")
-
-    except Exception as e:
-        error_msg = create_user_friendly_error(e)
-        click.echo(f"Error showing configuration: {error_msg}", err=True)
 
 
 @config.command("set")
@@ -758,6 +995,57 @@ def config_set(ctx: click.Context, key: str, value: str):
 
 
 @cli.command()
+@click.option("--port", "-p", type=int, default=None,
+              help="Port to serve metrics on (default: 9090)")
+@click.option("--host", type=str, default=None,
+              help="Host to bind to (default: 0.0.0.0)")
+@click.pass_context
+def metrics(ctx, port, host):
+    """Start a Prometheus metrics endpoint.
+
+    Exposes session analytics at /metrics for Prometheus scraping.
+    """
+    config = ctx.obj["config"]
+    console = ctx.obj["console"]
+
+    port = port or config.metrics.port
+    host = host or config.metrics.host
+
+    try:
+        from .services.metrics_server import MetricsServer
+    except ImportError:
+        click.echo(
+            "prometheus_client is required for the metrics command.\n"
+            "Install it with: pip install prometheus_client>=0.17.0",
+            err=True,
+        )
+        ctx.exit(1)
+        return
+
+    try:
+        console.print(f"[status.success]Starting Prometheus metrics server...[/status.success]")
+        console.print(f"[metric.label]Endpoint:[/metric.label] [metric.value]http://{host}:{port}/metrics[/metric.value]")
+        console.print("[dim]Press Ctrl+C to stop.[/dim]")
+
+        server = MetricsServer(ctx.obj["pricing_data"], host=host, port=port)
+        server.start()
+    except KeyboardInterrupt:
+        console.print("\n[status.warning]Metrics server stopped.[/status.warning]")
+    except OSError as e:
+        if e.errno == errno.EADDRINUSE:
+            click.echo(f"Port {port} is already in use. Try a different port with --port.", err=True)
+        else:
+            click.echo(f"Error starting metrics server: {e}", err=True)
+        ctx.exit(1)
+    except Exception as e:
+        error_msg = create_user_friendly_error(e)
+        click.echo(f"Error starting metrics server: {error_msg}", err=True)
+        if ctx.obj["verbose"]:
+            click.echo(f"Details: {str(e)}", err=True)
+        ctx.exit(1)
+
+
+@cli.command()
 @click.pass_context
 def agents(ctx: click.Context):
     """List all detected agents and their types.
@@ -765,7 +1053,7 @@ def agents(ctx: click.Context):
     Shows built-in and user-defined agents, indicating which are main agents
     (stay in same session) and which are sub-agents (create separate sessions).
     """
-    try:
+    with cli_error_context(ctx, "listing agents"):
         from .services.agent_registry import AgentRegistry
 
         registry = AgentRegistry()
@@ -782,13 +1070,6 @@ def agents(ctx: click.Context):
 
         console.print()
         console.print(f"[dim]Agent definitions from: {registry.agents_dir}[/dim]")
-
-    except Exception as e:
-        error_msg = create_user_friendly_error(e)
-        click.echo(f"Error listing agents: {error_msg}", err=True)
-        if ctx.obj["verbose"]:
-            click.echo(f"Details: {str(e)}", err=True)
-        ctx.exit(1)
 
 
 def main():

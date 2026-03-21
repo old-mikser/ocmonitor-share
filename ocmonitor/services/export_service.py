@@ -14,14 +14,16 @@ from .. import __version__
 class ExportService:
     """Service for exporting data to various formats."""
 
-    def __init__(self, export_dir: str = "./exports"):
+    def __init__(self, export_dir: str = "./exports", currency_converter=None):
         """Initialize export service.
 
         Args:
             export_dir: Directory to save exported files
+            currency_converter: Optional CurrencyConverter for currency conversion
         """
         self.export_dir = Path(export_dir)
         self.export_dir.mkdir(parents=True, exist_ok=True)
+        self.currency_converter = currency_converter
 
     def export_to_csv(self, data: List[Dict[str, Any]], filename: str,
                      include_metadata: bool = True) -> str:
@@ -55,6 +57,13 @@ class ExportService:
                     csvfile.write(f"# OpenCode Monitor Export\n")
                     csvfile.write(f"# Generated: {datetime.now().isoformat()}\n")
                     csvfile.write(f"# Records: {len(data)}\n")
+                    if self.currency_converter:
+                        code = self.currency_converter.code
+                        rate = self.currency_converter.rate
+                    else:
+                        code = "USD"
+                        rate = 1.0
+                    csvfile.write(f"# Currency: {code} (rate: {rate} from USD)\n")
                     csvfile.write("#\n")
 
                 # Get all unique keys from the data
@@ -114,11 +123,21 @@ class ExportService:
         # Prepare export data
         export_data = data
         if include_metadata:
+            if self.currency_converter:
+                code = self.currency_converter.code
+                rate = float(self.currency_converter.rate)
+            else:
+                code = "USD"
+                rate = 1.0
             metadata = {
                 'export_info': {
                     'generated_by': 'OpenCode Monitor',
                     'generated_at': datetime.now().isoformat(),
                     'version': __version__
+                },
+                'currency': {
+                    'code': code,
+                    'rate': rate,
                 }
             }
 
@@ -299,6 +318,7 @@ class ExportService:
             # For models breakdown, export model data
             model_breakdown = report_data.get('model_breakdown')
             if model_breakdown:
+                converter = self.currency_converter
                 return [
                     {
                         'model_name': model.model_name,
@@ -309,7 +329,7 @@ class ExportService:
                         'cache_write_tokens': model.total_tokens.cache_write,
                         'cache_read_tokens': model.total_tokens.cache_read,
                         'total_tokens': model.total_tokens.total,
-                        'total_cost': float(model.total_cost),
+                        'total_cost': float(converter.convert(model.total_cost)) if converter else float(model.total_cost),
                         'first_used': model.first_used.isoformat() if model.first_used else None,
                         'last_used': model.last_used.isoformat() if model.last_used else None
                     }
@@ -321,6 +341,7 @@ class ExportService:
             # For projects breakdown, export project data
             project_breakdown = report_data.get('project_breakdown')
             if project_breakdown:
+                converter = self.currency_converter
                 return [
                     {
                         'project_name': project.project_name,
@@ -331,7 +352,7 @@ class ExportService:
                         'cache_write_tokens': project.total_tokens.cache_write,
                         'cache_read_tokens': project.total_tokens.cache_read,
                         'total_tokens': project.total_tokens.total,
-                        'total_cost': float(project.total_cost),
+                        'total_cost': float(converter.convert(project.total_cost)) if converter else float(project.total_cost),
                         'models_used': ', '.join(project.models_used),
                         'first_activity': project.first_activity.isoformat() if project.first_activity else None,
                         'last_activity': project.last_activity.isoformat() if project.last_activity else None
