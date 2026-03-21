@@ -504,6 +504,7 @@ class TableFormatter:
                 sub.total_tokens.total for sub in sub_agents
             )
             
+            # Parent session
             session_cost = session.calculate_total_cost(pricing_data)
             session_total_cost = session_cost + sum(sub_costs)
             title = session.display_title
