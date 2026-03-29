@@ -53,11 +53,19 @@ class ReportGenerator:
                         'sessions': set(),
                         'interactions': 0,
                         'tokens': 0,
+                        'input_tokens': 0,
+                        'output_tokens': 0,
+                        'cache_read': 0,
+                        'cache_write': 0,
                         'cost': Decimal('0.0')
                     }
                 model_data[model]['sessions'].add(session.session_id)
                 model_data[model]['interactions'] += 1
                 model_data[model]['tokens'] += file.tokens.total
+                model_data[model]['input_tokens'] += file.tokens.input
+                model_data[model]['output_tokens'] += file.tokens.output
+                model_data[model]['cache_read'] += file.tokens.cache_read
+                model_data[model]['cache_write'] += file.tokens.cache_write
                 model_data[model]['cost'] += file.calculate_cost(self.analyzer.pricing_data)
 
         results = []
@@ -67,6 +75,10 @@ class ReportGenerator:
                 'sessions': len(data['sessions']),
                 'interactions': data['interactions'],
                 'tokens': data['tokens'],
+                'input_tokens': data['input_tokens'],
+                'output_tokens': data['output_tokens'],
+                'cache_read': data['cache_read'],
+                'cache_write': data['cache_write'],
                 'cost': data['cost']
             })
 
@@ -717,25 +729,37 @@ class ReportGenerator:
             table.add_column("Date / Model", style="table.row.time", no_wrap=True)
             table.add_column("Sessions", justify="right", style="status.success")
             table.add_column("Interactions", justify="right", style="status.success")
+            table.add_column("Input", justify="right", style="table.row.tokens")
+            table.add_column("Output", justify="right", style="table.row.tokens")
+            table.add_column("Cache Read", justify="right", style="table.row.tokens")
+            table.add_column("Cache Write", justify="right", style="table.row.tokens")
             table.add_column("Total Tokens", justify="right", style="table.row.tokens")
             table.add_column("Cost", justify="right", style="table.row.cost")
-            
+
             for day in daily_usage:
                 day_cost = day.calculate_total_cost(self.analyzer.pricing_data)
                 table.add_row(
                     day.date.strftime('%Y-%m-%d'),
                     f"{len(day.sessions)}",
                     f"{day.total_interactions}",
+                    f"{day.total_tokens.input:,}",
+                    f"{day.total_tokens.output:,}",
+                    f"{day.total_tokens.cache_read:,}",
+                    f"{day.total_tokens.cache_write:,}",
                     f"{day.total_tokens.total:,}",
                     self._fmt_cost(day_cost)
                 )
-                
+
                 model_breakdown = self._get_model_breakdown_for_sessions(day.sessions)
                 for model_data in model_breakdown:
                     table.add_row(
                         f"  ↳ {model_data['model']}",
                         f"{model_data['sessions']}",
                         f"{model_data['interactions']}",
+                        f"{model_data['input_tokens']:,}",
+                        f"{model_data['output_tokens']:,}",
+                        f"{model_data['cache_read']:,}",
+                        f"{model_data['cache_write']:,}",
                         f"{model_data['tokens']:,}",
                         self._fmt_cost(model_data['cost']),
                         style="table.row.dim"

@@ -198,12 +198,19 @@ class ConfigManager:
         self._pricing_data: Optional[Dict[str, ModelPricing]] = None
 
     def _find_config_file(self) -> str:
-        """Find configuration file in standard locations."""
+        """Find configuration file in standard locations.
+        
+        Search order (first found wins):
+        1. User config: ~/.config/ocmonitor/config.toml
+        2. Project-local config.toml
+        3. Project-local ocmonitor.toml
+        4. Packaged fallback: ocmonitor/config.toml (always returns this if nothing else exists)
+        """
         search_paths = [
-            os.path.join(os.path.dirname(__file__), "config.toml"),
             os.path.expanduser("~/.config/ocmonitor/config.toml"),
             "config.toml",
             "ocmonitor.toml",
+            os.path.join(os.path.dirname(__file__), "config.toml"),
         ]
 
         for path in search_paths:
@@ -211,7 +218,7 @@ class ConfigManager:
                 return path
 
         # Return default path even if it doesn't exist
-        return search_paths[0]
+        return search_paths[-1]
 
     @property
     def config(self) -> Config:
@@ -227,7 +234,7 @@ class ConfigManager:
             return Config()
 
         try:
-            with open(self.config_path, 'r') as f:
+            with open(self.config_path, 'r', encoding='utf-8') as f:
                 config_data = toml.load(f)
             return Config(**config_data)
         except (toml.TomlDecodeError, ValueError) as e:
@@ -342,7 +349,7 @@ class ConfigManager:
             return {}
         
         try:
-            with open(file_path, 'r') as f:
+            with open(file_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except (json.JSONDecodeError, IOError):
             return {}

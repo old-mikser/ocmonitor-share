@@ -64,11 +64,11 @@ display_format = "symbol_prefix"
 # decimals = 2
 
 # Preset rates for common currencies (uncomment and adjust as needed):
-# GBP: code = "GBP", symbol = "£", rate = 0.79
-# EUR: code = "EUR", symbol = "€", rate = 0.92
-# CNY: code = "CNY", symbol = "¥", rate = 7.24
-# JPY: code = "JPY", symbol = "¥", rate = 149.50
-# INR: code = "INR", symbol = "₹", rate = 83.12
+# GBP: code = "GBP", symbol = "GBP", rate = 0.79
+# EUR: code = "EUR", symbol = "EUR", rate = 0.92
+# CNY: code = "CNY", symbol = "CNY", rate = 7.24
+# JPY: code = "JPY", symbol = "JPY", rate = 149.50
+# INR: code = "INR", symbol = "INR", rate = 83.12
 
 # Live rate fetching from frankfurter.dev (free, no API key required)
 remote_rates = false

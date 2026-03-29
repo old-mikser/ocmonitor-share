@@ -39,6 +39,14 @@
     "contextWindow": 200000,
     "sessionQuota": 0.0
   },
+  "minimax-m2.7": {
+    "input": 0.3,
+    "output": 1.2,
+    "cacheWrite": 0.375,
+    "cacheRead": 0.06,
+    "contextWindow": 200000,
+    "sessionQuota": 0.0
+  },
 
   "kimi-k2.5-free": {
     "input": 0.6,

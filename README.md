@@ -460,12 +460,12 @@ allow_stale_rates_on_error = true
 ```
 
 **Configuration File Search Order:**
-1. Bundled package default (`ocmonitor/config.toml`)
-2. `~/.config/ocmonitor/config.toml` (recommended user overrides)
-3. `config.toml` (current directory)
-4. `ocmonitor.toml` (current directory)
+1. `~/.config/ocmonitor/config.toml` (user overrides - highest priority)
+2. `config.toml` (current directory)
+3. `ocmonitor.toml` (current directory)
+4. Packaged fallback: `ocmonitor/config.toml` (lowest priority, only used if no other config exists)
 
-User settings in `~/.config/ocmonitor/config.toml` override the bundled defaults.
+User settings in `~/.config/ocmonitor/config.toml` take precedence over all other locations.
 
 ### Remote Pricing Fallback
 
@@ -515,7 +515,7 @@ rate = 0.79
 | Euro | EUR | € | 0.92 |
 | Chinese Yuan | CNY | ¥ | 7.24 |
 | Japanese Yen | JPY | ¥ | 149.50 |
-| Indian Rupee | INR | ₹ | 83.12 |
+| Indian Rupee | INR | INR | 83.12 |
 
 **Display Formats:**
 - `symbol_prefix` (default): `$1.23` or `£1.23`

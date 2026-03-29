@@ -19,6 +19,7 @@ from ocmonitor.config import (
     ConfigManager,
     opencode_storage_path,
 )
+import ocmonitor.config as config_module
 
 
 class TestOpencodeStoragePath:
@@ -556,3 +557,152 @@ host = "127.0.0.1"
             MetricsConfig(port=80)  # Below 1024
         with pytest.raises(ValueError):
             MetricsConfig(port=70000)  # Above 65535
+
+
+class TestUtf8ConfigHandling:
+    """Regression tests for UTF-8 encoding handling in config files."""
+
+    def test_load_config_with_utf8_currency_symbols_in_comments(self, temp_directory):
+        """Test that TOML config files with UTF-8 currency symbols load correctly.
+
+        This is a regression test for Windows where the default encoding (e.g., GBK)
+        would cause parsing to fail when the packaged config contains UTF-8 characters.
+        """
+        config_content = """
+# Config with £, €, ¥, ₹ symbols
+[currency]
+code = "EUR"
+symbol = "€"
+rate = 0.92
+display_format = "symbol_prefix"
+
+# Preset rates:
+# GBP: code = "GBP", symbol = "£", rate = 0.79
+# EUR: code = "EUR", symbol = "€", rate = 0.92
+# CNY: code = "CNY", symbol = "¥", rate = 7.24
+# JPY: code = "JPY", symbol = "¥", rate = 149.50
+# INR: code = "INR", symbol = "₹", rate = 83.12
+"""
+        config_path = temp_directory / "utf8_config.toml"
+        config_path.write_text(config_content, encoding="utf-8")
+
+        manager = ConfigManager(config_path=str(config_path))
+        config = manager.config
+
+        assert config.currency.code == "EUR"
+        assert config.currency.symbol == "€"
+        assert config.currency.rate == Decimal("0.92")
+
+    def test_load_config_with_utf8_in_values(self, temp_directory):
+        """Test that TOML config files with UTF-8 in string values load correctly."""
+        config_content = """
+[paths]
+messages_dir = "~/OpenCode/数据"
+
+[ui]
+# Theme name with non-ASCII
+table_style = "rich"
+"""
+        config_path = temp_directory / "utf8_values.toml"
+        config_path.write_text(config_content, encoding="utf-8")
+
+        manager = ConfigManager(config_path=str(config_path))
+        config = manager.config
+
+        assert "数据" in config.paths.messages_dir
+
+    def test_load_pricing_file_with_utf8_characters(self, temp_directory):
+        """Test that JSON pricing files with UTF-8 content load correctly."""
+        models_data = {
+            "test-model": {
+                "input": 1.0,
+                "output": 2.0,
+                "cacheWrite": 1.5,
+                "cacheRead": 0.1,
+                "contextWindow": 128000,
+                "sessionQuota": 5.0
+            }
+        }
+
+        models_file = temp_directory / "models.json"
+        models_file.write_text(json.dumps(models_data), encoding="utf-8")
+
+        config_file = temp_directory / "config.toml"
+        config_file.write_text(f"""
+[models]
+config_file = "{models_file}"
+remote_fallback = false
+""")
+
+        manager = ConfigManager(config_path=str(config_file))
+        pricing = manager.load_pricing_data()
+
+        assert "test-model" in pricing
+        assert pricing["test-model"].input == Decimal("1.0")
+
+
+class TestConfigSearchPrecedence:
+    """Regression tests for config file search precedence."""
+
+    def test_explicit_config_path_overrides_search(self, temp_directory):
+        """Test that explicit config_path takes highest priority."""
+        explicit_config = temp_directory / "explicit.toml"
+        explicit_config.write_text("""
+[ui]
+table_style = "minimal"
+""")
+
+        manager = ConfigManager(config_path=str(explicit_config))
+        assert manager.config.ui.table_style == "minimal"
+
+    def test_find_config_file_returns_user_config_when_exists(self, temp_directory, monkeypatch):
+        """Test that user config path is checked first in search order."""
+        user_config_path = Path(temp_directory) / ".config" / "ocmonitor" / "config.toml"
+        user_config_path.parent.mkdir(parents=True, exist_ok=True)
+        user_config_path.write_text("""
+[ui]
+table_style = "minimal"
+""")
+
+        original_exists = os.path.exists
+
+        def mock_exists(path):
+            path_str = str(path)
+            if path_str == str(user_config_path):
+                return True
+            if "config.toml" in path_str or "ocmonitor.toml" in path_str:
+                return path_str == str(user_config_path)
+            return original_exists(path)
+
+        with monkeypatch.context() as m:
+            m.setenv("HOME", str(temp_directory))
+            m.setattr("ocmonitor.config.os.path.exists", mock_exists)
+
+            manager = ConfigManager()
+            assert str(user_config_path) == manager.config_path
+            assert manager.config.ui.table_style == "minimal"
+
+    def test_packaged_config_is_final_fallback(self, temp_directory, monkeypatch):
+        """Test that packaged config is used when no user/project config exists."""
+        packaged_config = Path(config_module.__file__).parent / "config.toml"
+
+        if not packaged_config.exists():
+            pytest.skip("Packaged config.toml not found")
+
+        original_exists = os.path.exists
+
+        def mock_exists(path):
+            path_str = str(path)
+            if ".config/ocmonitor" in path_str:
+                return False
+            if path_str.endswith("config.toml") or path_str.endswith("ocmonitor.toml"):
+                return False
+            return original_exists(path)
+
+        with monkeypatch.context() as m:
+            m.setenv("HOME", str(temp_directory))
+            m.setattr("ocmonitor.config.os.path.exists", mock_exists)
+
+            manager = ConfigManager()
+            assert manager.config_path == str(packaged_config)
+            assert isinstance(manager.config, Config)
