@@ -5,6 +5,33 @@ All notable changes to OpenCode Monitor will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.3] - 2026-03-26
+
+### 🐛 Bug Fixes
+
+- Fix config file encoding on Windows by explicitly using UTF-8 for all file reads
+- Fix config search order to check user config before packaged fallback
+- Fix live dashboard to correctly aggregate workflow cost and token totals including sub-agents
+- Fix workflow ordering to sort by latest parent message activity instead of session creation time
+- Fix 10-workflow cap to apply after filtering unusable parent sessions, not before
+- Fix SQL query to use `MAX(m.time_created)` for accurate parent activity detection
+- Increase SQL LIMIT from 10 to 30 to reduce ACP session filtering issues
+- Handle null/empty `sub_agents` lists gracefully in live dashboard
+
+### ✨ Improvements
+
+- Resolve runtime version from package metadata instead of hardcoded value
+- Add `-h` as a short flag alias for `--help`
+- Add detailed token breakdown (input/output/cache_read/cache_write) to daily report tables
+- Rename `workflow_total` to `session_total` for consistent naming
+
+### 🙏 Acknowledgements
+
+Thanks to our contributors for this release:
+
+- **[@bwendell](https://github.com/bwendell)** - Added `-h` short flag for help ([#33](https://github.com/Shlomob/ocmonitor-share/pull/33))
+- **[@old-mikser](https://github.com/old-mikser)** - Fixed session picking edge cases, workflow aggregation, and SQL queries ([#30](https://github.com/Shlomob/ocmonitor-share/pull/30))
+
 ## [1.0.2] - 2026-03-14
 
 ### 🌍 Currency Conversion
@@ -399,7 +426,8 @@ ocmonitor export <type>    # Data export functionality
 
 ## Version History Summary
 
-- **v1.1.0** - Currency conversion (USD, GBP, EUR, JPY, CNY, INR) with live rates
+- **v1.0.3** - Bug fixes for config encoding, workflow aggregation, and SQL queries; version metadata resolution
+- **v1.0.2** - Currency conversion (USD, GBP, EUR, JPY, CNY, INR) with live rates
 - **v1.0.1** - Prometheus `/metrics` endpoint for Grafana integration
 - **v0.9.4** - Model detail command with fuzzy matching; live workflow picker and session pinning
 - **v0.9.3** - Tool usage tracking in live dashboard
