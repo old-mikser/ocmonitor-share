@@ -152,7 +152,7 @@ _REPORT_METHOD_MAP = {
 }
 
 
-@click.group()
+@click.group(context_settings={"help_option_names": ["-h", "--help"]})
 @click.version_option(version=__version__)
 @click.option(
     "--config", "-c", type=click.Path(exists=True), help="Path to configuration file"
