@@ -330,6 +330,16 @@ class TestCLIHelp:
         
         assert result.exit_code == 0
         assert "Usage:" in result.output
+
+    def test_main_short_help_alias(self):
+        """Test main CLI short help alias."""
+        runner = CliRunner()
+        long_help = runner.invoke(cli, ['--help'])
+        short_help = runner.invoke(cli, ['-h'])
+
+        assert long_help.exit_code == 0
+        assert short_help.exit_code == 0
+        assert short_help.output == long_help.output
     
     def test_sessions_help(self):
         """Test sessions command help."""
