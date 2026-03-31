@@ -320,6 +320,7 @@ class TestCLIHelp:
         assert "Usage:" in result.output
 
     def test_main_short_help_alias(self):
+        """Test main CLI short help alias."""
         runner = CliRunner()
         long_help = runner.invoke(cli, ['--help'])
         short_help = runner.invoke(cli, ['-h'])
