@@ -8,7 +8,7 @@ from typing import List, Dict, Any, Optional, Union
 from datetime import datetime
 
 from ..utils.formatting import DataFormatter
-from .. import __version__
+from ..version import get_version
 
 
 class ExportService:
@@ -133,7 +133,7 @@ class ExportService:
                 'export_info': {
                     'generated_by': 'OpenCode Monitor',
                     'generated_at': datetime.now().isoformat(),
-                    'version': __version__
+                    'version': get_version()
                 },
                 'currency': {
                     'code': code,

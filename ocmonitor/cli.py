@@ -11,7 +11,6 @@ from typing import Any, Optional
 import click
 from rich.console import Console
 
-from . import __version__
 from .config import config_manager
 from .services.export_service import ExportService
 from .services.live_monitor import LiveMonitor
@@ -23,6 +22,7 @@ from .utils.error_handling import (
     create_user_friendly_error,
     handle_errors,
 )
+from .version import get_version
 
 
 def json_serializer(obj):
@@ -153,7 +153,7 @@ _REPORT_METHOD_MAP = {
 
 
 @click.group()
-@click.version_option(version=__version__)
+@click.version_option(version=get_version())
 @click.option(
     "--config", "-c", type=click.Path(exists=True), help="Path to configuration file"
 )
