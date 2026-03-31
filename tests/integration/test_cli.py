@@ -8,6 +8,7 @@ from click.testing import CliRunner
 from unittest.mock import patch
 
 from ocmonitor.cli import cli
+from ocmonitor.version import get_version
 
 
 @pytest.fixture
@@ -56,6 +57,17 @@ class TestConfigCommand:
         # Should succeed and show configuration
         assert result.exit_code == 0
         assert result.output != ""
+
+
+class TestVersionCommand:
+    """Tests for version reporting."""
+
+    def test_version_matches_resolved_package_version(self):
+        runner = CliRunner()
+        result = runner.invoke(cli, ["--version"])
+
+        assert result.exit_code == 0
+        assert f"version {get_version()}" in result.output
 
 
 class TestSessionsCommand:
