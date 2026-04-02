@@ -720,7 +720,8 @@ def weekly(
 
 @cli.command()
 @click.argument("path", type=click.Path(exists=True), required=False)
-@click.option("--year", type=int, help="Year to analyze")
+@click.option("--year", is_flag=False, flag_value="LAST_N_DAYS", default=None, callback=parse_period,
+              help="Year to analyze (YYYY) or bare for last 365 days")
 @click.option(
     "--format",
     "-f",
@@ -742,13 +743,25 @@ def monthly(
 
     PATH: Path to directory containing session folders
           (defaults to configured messages directory)
+
+    Use --year (bare for last periods) to show recent periods.
     """
-    path = resolve_path(path, default_to_messages_dir=True)
+    config = ctx.obj["config"]
+
+    if not path:
+        path = config.paths.messages_dir
+
+    last_n_days = None
+    year_filter = None
+    if year == "LAST_N_DAYS":
+        last_n_days = 365
+    elif year:
+        year_filter = year
 
     with cli_error_context(ctx, "generating monthly breakdown"):
         report_generator = ctx.obj["report_generator"]
         result = report_generator.generate_monthly_report(
-            path, year, output_format, breakdown
+            path, year_filter, output_format, breakdown, last_n_days
         )
 
         handle_output_format(result, output_format)
