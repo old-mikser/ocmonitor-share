@@ -43,10 +43,12 @@ def parse_period(ctx, param, value):
         return "LAST_N_DAYS"
     if value is not None:
         if param.name == "year":
-            try:
-                return int(value)
-            except (ValueError, TypeError):
+            if not isinstance(value, str) or not value.isdigit() or len(value) != 4:
                 raise click.BadParameter("Year must be a valid YYYY format (e.g., 2024)")
+            year_int = int(value)
+            if year_int < 1:
+                raise click.BadParameter("Year must be a valid YYYY format (e.g., 2024)")
+            return year_int
         return value
     return None
 
@@ -627,6 +629,16 @@ def daily(
     if not path:
         path = config.paths.messages_dir
 
+    period_opts = 0
+    if month is not None:
+        period_opts += 1
+    if last_week:
+        period_opts += 1
+    if year is not None:
+        period_opts += 1
+    if period_opts > 1:
+        raise click.UsageError("Options --week, --month, and --year are mutually exclusive")
+
     last_n_days = None
     year_filter = None
     if month == "LAST_N_DAYS":
@@ -692,6 +704,9 @@ def weekly(
 
     if not path:
         path = config.paths.messages_dir
+
+    if month is not None and year is not None:
+        raise click.UsageError("Options --month and --year are mutually exclusive")
 
     from .utils.time_utils import WEEKDAY_MAP
 

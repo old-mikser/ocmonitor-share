@@ -210,7 +210,11 @@ class ReportGenerator:
         if output_format == "table":
             self._display_daily_breakdown_table(daily_usage, breakdown)
         elif output_format == "json":
-            return self._format_daily_breakdown_json(daily_usage)
+            result = self._format_daily_breakdown_json(daily_usage)
+            result['type'] = 'daily_breakdown'
+            result['filter'] = filter_desc
+            result['filter_label'] = filter_label
+            return result
         elif output_format == "csv":
             return self._format_daily_breakdown_csv(daily_usage)
 
@@ -263,7 +267,10 @@ class ReportGenerator:
             filter_desc = {'last_n_days': last_n_days, 'week_start_day': week_start_day}
             filter_label = 'last ' + str(last_n_days) + ' days'
         else:
-            filter_desc = None
+            if week_start_day != 0:
+                filter_desc = {'week_start_day': week_start_day}
+            else:
+                filter_desc = None
             filter_label = None
 
         report_data = {
@@ -276,7 +283,11 @@ class ReportGenerator:
         if output_format == "table":
             self._display_weekly_breakdown_table(weekly_usage, breakdown, week_start_day)
         elif output_format == "json":
-            return self._format_weekly_breakdown_json(weekly_usage)
+            result = self._format_weekly_breakdown_json(weekly_usage)
+            result['type'] = 'weekly_breakdown'
+            result['filter'] = filter_desc
+            result['filter_label'] = filter_label
+            return result
         elif output_format == "csv":
             return self._format_weekly_breakdown_csv(weekly_usage)
 
@@ -328,7 +339,11 @@ class ReportGenerator:
         if output_format == "table":
             self._display_monthly_breakdown_table(monthly_usage, breakdown)
         elif output_format == "json":
-            return self._format_monthly_breakdown_json(monthly_usage)
+            result = self._format_monthly_breakdown_json(monthly_usage)
+            result['type'] = 'monthly_breakdown'
+            result['filter'] = filter_desc
+            result['filter_label'] = filter_label
+            return result
         elif output_format == "csv":
             return self._format_monthly_breakdown_csv(monthly_usage)
 
