@@ -46,7 +46,7 @@ def parse_period(ctx, param, value):
             try:
                 return int(value)
             except (ValueError, TypeError):
-                return value
+                raise click.BadParameter("Year must be a valid YYYY format (e.g., 2024)")
         return value
     return None
 

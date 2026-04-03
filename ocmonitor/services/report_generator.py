@@ -188,18 +188,23 @@ class ReportGenerator:
         daily_usage = self.analyzer.create_daily_breakdown(sessions)
 
         if month:
-            filter_desc = 'month: ' + month
+            filter_desc = {'month': month}
+            filter_label = 'month: ' + month
         elif last_n_days:
-            filter_desc = 'last ' + str(last_n_days) + ' days'
+            filter_desc = {'last_n_days': last_n_days}
+            filter_label = 'last ' + str(last_n_days) + ' days'
         elif year:
-            filter_desc = 'year: ' + str(year)
+            filter_desc = {'year': year}
+            filter_label = 'year: ' + str(year)
         else:
             filter_desc = None
+            filter_label = None
 
         report_data = {
             'type': 'daily_breakdown',
             'daily_usage': daily_usage,
-            'filter': filter_desc
+            'filter': filter_desc,
+            'filter_label': filter_label
         }
 
         if output_format == "table":
@@ -250,17 +255,22 @@ class ReportGenerator:
 
         if month:
             filter_desc = {'month': month, 'week_start_day': week_start_day}
+            filter_label = 'month: ' + month
         elif year:
             filter_desc = {'year': year, 'week_start_day': week_start_day}
+            filter_label = 'year: ' + str(year)
         elif last_n_days:
             filter_desc = {'last_n_days': last_n_days, 'week_start_day': week_start_day}
+            filter_label = 'last ' + str(last_n_days) + ' days'
         else:
             filter_desc = None
+            filter_label = None
 
         report_data = {
             'type': 'weekly_breakdown',
             'weekly_usage': weekly_usage,
-            'filter': filter_desc
+            'filter': filter_desc,
+            'filter_label': filter_label
         }
 
         if output_format == "table":
@@ -300,15 +310,19 @@ class ReportGenerator:
 
         if year:
             filter_desc = {'year': year}
+            filter_label = 'year: ' + str(year)
         elif last_n_days:
             filter_desc = {'last_n_days': last_n_days}
+            filter_label = 'last ' + str(last_n_days) + ' days'
         else:
             filter_desc = None
+            filter_label = None
 
         report_data = {
             'type': 'monthly_breakdown',
             'monthly_usage': monthly_usage,
-            'filter': filter_desc
+            'filter': filter_desc,
+            'filter_label': filter_label
         }
 
         if output_format == "table":
