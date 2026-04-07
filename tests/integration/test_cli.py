@@ -116,6 +116,37 @@ class TestDailyCommand:
         assert result.exit_code == 0
 
 
+
+
+    def test_daily_invalid_year_rejected(self, mock_sessions_dir):
+        """Test daily command rejects invalid year at parse-time."""
+        runner = CliRunner()
+        result = runner.invoke(cli, ['daily', str(mock_sessions_dir), '--year', '20x6'])
+
+        assert result.exit_code == 2
+        assert "Invalid value for '--year'" in result.output
+
+    def test_daily_rejects_multiple_period_options(self, mock_sessions_dir):
+        """Test daily command rejects conflicting period options."""
+        runner = CliRunner()
+        result = runner.invoke(cli, ['daily', str(mock_sessions_dir), '--week', '--year', '2024'])
+
+        assert result.exit_code == 2
+        assert 'mutually exclusive' in result.output
+
+    def test_daily_json_includes_filter(self, mock_sessions_dir):
+        """Test daily JSON output includes filter metadata."""
+        runner = CliRunner()
+        result = runner.invoke(cli, ['daily', str(mock_sessions_dir), '--year', '2024', '--format', 'json'])
+
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data['type'] == 'daily_breakdown'
+        assert data['filter'] == {'year': 2024}
+        assert data['filter_label'] == 'year: 2024'
+        assert isinstance(data.get('daily_breakdown'), list)
+
+
 class TestWeeklyCommand:
     """Tests for weekly CLI command."""
     
@@ -134,6 +165,37 @@ class TestWeeklyCommand:
         assert result.exit_code == 0
 
 
+
+
+    def test_weekly_invalid_year_rejected(self, mock_sessions_dir):
+        """Test weekly command rejects invalid year at parse-time."""
+        runner = CliRunner()
+        result = runner.invoke(cli, ['weekly', str(mock_sessions_dir), '--year', '20x6'])
+
+        assert result.exit_code == 2
+        assert "Invalid value for '--year'" in result.output
+
+    def test_weekly_rejects_month_and_year_together(self, mock_sessions_dir):
+        """Test weekly command rejects --month + --year together."""
+        runner = CliRunner()
+        result = runner.invoke(cli, ['weekly', str(mock_sessions_dir), '--month', '2024-01', '--year', '2024'])
+
+        assert result.exit_code == 2
+        assert 'mutually exclusive' in result.output
+
+    def test_weekly_json_includes_week_start_day_filter(self, mock_sessions_dir):
+        """Test weekly JSON output includes week_start_day filter when custom."""
+        runner = CliRunner()
+        result = runner.invoke(cli, ['weekly', str(mock_sessions_dir), '--start-day', 'sunday', '--format', 'json'])
+
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data['type'] == 'weekly_breakdown'
+        assert data['filter'] == {'week_start_day': 6}
+        assert data['filter_label'] is None
+        assert isinstance(data.get('weekly_breakdown'), list)
+
+
 class TestMonthlyCommand:
     """Tests for monthly CLI command."""
     
@@ -143,6 +205,29 @@ class TestMonthlyCommand:
         result = runner.invoke(cli, ['monthly', str(mock_sessions_dir)])
         
         assert result.exit_code == 0
+
+
+
+
+    def test_monthly_invalid_year_rejected(self, mock_sessions_dir):
+        """Test monthly command rejects invalid year at parse-time."""
+        runner = CliRunner()
+        result = runner.invoke(cli, ['monthly', str(mock_sessions_dir), '--year', '20x6'])
+
+        assert result.exit_code == 2
+        assert "Invalid value for '--year'" in result.output
+
+    def test_monthly_json_includes_filter(self, mock_sessions_dir):
+        """Test monthly JSON output includes filter metadata."""
+        runner = CliRunner()
+        result = runner.invoke(cli, ['monthly', str(mock_sessions_dir), '--year', '2024', '--format', 'json'])
+
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data['type'] == 'monthly_breakdown'
+        assert data['filter'] == {'year': 2024}
+        assert data['filter_label'] == 'year: 2024'
+        assert isinstance(data.get('monthly_breakdown'), list)
 
 
 class TestExportCommand:

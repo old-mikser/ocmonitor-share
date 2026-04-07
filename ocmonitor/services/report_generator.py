@@ -154,117 +154,196 @@ class ReportGenerator:
         return report_data
 
     def generate_daily_report(self, base_path: str, month: Optional[str] = None,
-                            output_format: str = "table", breakdown: bool = False) -> Dict[str, Any]:
+                            output_format: str = "table", breakdown: bool = False,
+                            last_n_days: Optional[int] = None,
+                            year: Optional[int] = None) -> Dict[str, Any]:
         """Generate daily breakdown report.
 
         Args:
             base_path: Path to directory containing sessions
             month: Optional month filter (YYYY-MM format)
             output_format: Output format ("table", "json", "csv")
+            last_n_days: Optional - if set, filter to last N days
+            year: Optional year filter (YYYY)
 
         Returns:
             Report data
         """
         sessions = self.analyzer.analyze_all_sessions(base_path)
 
-        # Apply month filter if specified
+        from ..utils.time_utils import TimeUtils
         if month:
-            from ..utils.time_utils import TimeUtils
             month_data = TimeUtils.parse_month_string(month)
             if month_data:
-                year, month_num = month_data
-                start_date, end_date = TimeUtils.get_month_range(year, month_num)
+                year_num, month_num = month_data
+                start_date, end_date = TimeUtils.get_month_range(year_num, month_num)
                 sessions = self.analyzer.filter_sessions_by_date(sessions, start_date, end_date)
+        elif last_n_days:
+            start_date, end_date = TimeUtils.get_last_n_days_range(last_n_days)
+            sessions = self.analyzer.filter_sessions_by_date(sessions, start_date, end_date)
+        elif year:
+            start_date, end_date = TimeUtils.get_year_range(year)
+            sessions = self.analyzer.filter_sessions_by_date(sessions, start_date, end_date)
 
         daily_usage = self.analyzer.create_daily_breakdown(sessions)
+
+        if month:
+            filter_desc = {'month': month}
+            filter_label = 'month: ' + month
+        elif last_n_days:
+            filter_desc = {'last_n_days': last_n_days}
+            filter_label = 'last ' + str(last_n_days) + ' days'
+        elif year:
+            filter_desc = {'year': year}
+            filter_label = 'year: ' + str(year)
+        else:
+            filter_desc = None
+            filter_label = None
 
         report_data = {
             'type': 'daily_breakdown',
             'daily_usage': daily_usage,
-            'filter': {'month': month} if month else None
+            'filter': filter_desc,
+            'filter_label': filter_label
         }
 
         if output_format == "table":
             self._display_daily_breakdown_table(daily_usage, breakdown)
         elif output_format == "json":
-            return self._format_daily_breakdown_json(daily_usage)
+            result = self._format_daily_breakdown_json(daily_usage)
+            result['type'] = 'daily_breakdown'
+            result['filter'] = filter_desc
+            result['filter_label'] = filter_label
+            return result
         elif output_format == "csv":
             return self._format_daily_breakdown_csv(daily_usage)
 
         return report_data
 
     def generate_weekly_report(self, base_path: str, year: Optional[int] = None,
+                              month: Optional[str] = None,
                               output_format: str = "table", breakdown: bool = False,
-                              week_start_day: int = 0) -> Dict[str, Any]:
+                              week_start_day: int = 0,
+                              last_n_days: Optional[int] = None) -> Dict[str, Any]:
         """Generate weekly breakdown report.
 
         Args:
             base_path: Path to directory containing sessions
-            year: Optional year filter
+            year: Optional year filter (YYYY)
+            month: Optional month filter (YYYY-MM format)
             output_format: Output format ("table", "json", "csv")
             breakdown: Show per-model breakdown
             week_start_day: Day to start week on (0=Monday, 6=Sunday)
+            last_n_days: Optional - if set, filter to last N days
 
         Returns:
             Report data
         """
         sessions = self.analyzer.analyze_all_sessions(base_path)
 
-        # Apply year filter if specified
-        if year:
-            from ..utils.time_utils import TimeUtils
+        from ..utils.time_utils import TimeUtils
+        if month:
+            month_data = TimeUtils.parse_month_string(month)
+            if month_data:
+                year_num, month_num = month_data
+                start_date, end_date = TimeUtils.get_month_range(year_num, month_num)
+                sessions = self.analyzer.filter_sessions_by_date(sessions, start_date, end_date)
+        elif year:
             start_date, end_date = TimeUtils.get_year_range(year)
+            sessions = self.analyzer.filter_sessions_by_date(sessions, start_date, end_date)
+        elif last_n_days:
+            start_date, end_date = TimeUtils.get_last_n_days_range(last_n_days)
             sessions = self.analyzer.filter_sessions_by_date(sessions, start_date, end_date)
 
         weekly_usage = self.analyzer.create_weekly_breakdown(sessions, week_start_day)
 
+        if month:
+            filter_desc = {'month': month, 'week_start_day': week_start_day}
+            filter_label = 'month: ' + month
+        elif year:
+            filter_desc = {'year': year, 'week_start_day': week_start_day}
+            filter_label = 'year: ' + str(year)
+        elif last_n_days:
+            filter_desc = {'last_n_days': last_n_days, 'week_start_day': week_start_day}
+            filter_label = 'last ' + str(last_n_days) + ' days'
+        else:
+            if week_start_day != 0:
+                filter_desc = {'week_start_day': week_start_day}
+            else:
+                filter_desc = None
+            filter_label = None
+
         report_data = {
             'type': 'weekly_breakdown',
             'weekly_usage': weekly_usage,
-            'filter': {'year': year, 'week_start_day': week_start_day} if year or week_start_day != 0 else None
+            'filter': filter_desc,
+            'filter_label': filter_label
         }
 
         if output_format == "table":
             self._display_weekly_breakdown_table(weekly_usage, breakdown, week_start_day)
         elif output_format == "json":
-            return self._format_weekly_breakdown_json(weekly_usage)
+            result = self._format_weekly_breakdown_json(weekly_usage)
+            result['type'] = 'weekly_breakdown'
+            result['filter'] = filter_desc
+            result['filter_label'] = filter_label
+            return result
         elif output_format == "csv":
             return self._format_weekly_breakdown_csv(weekly_usage)
 
         return report_data
 
     def generate_monthly_report(self, base_path: str, year: Optional[int] = None,
-                              output_format: str = "table", breakdown: bool = False) -> Dict[str, Any]:
+                              output_format: str = "table", breakdown: bool = False,
+                              last_n_days: Optional[int] = None) -> Dict[str, Any]:
         """Generate monthly breakdown report.
 
         Args:
             base_path: Path to directory containing sessions
             year: Optional year filter
             output_format: Output format ("table", "json", "csv")
+            last_n_days: Optional - if set, filter to last N days
 
         Returns:
             Report data
         """
         sessions = self.analyzer.analyze_all_sessions(base_path)
 
-        # Apply year filter if specified
+        from ..utils.time_utils import TimeUtils
         if year:
-            from ..utils.time_utils import TimeUtils
             start_date, end_date = TimeUtils.get_year_range(year)
+            sessions = self.analyzer.filter_sessions_by_date(sessions, start_date, end_date)
+        elif last_n_days:
+            start_date, end_date = TimeUtils.get_last_n_days_range(last_n_days)
             sessions = self.analyzer.filter_sessions_by_date(sessions, start_date, end_date)
 
         monthly_usage = self.analyzer.create_monthly_breakdown(sessions)
 
+        if year:
+            filter_desc = {'year': year}
+            filter_label = 'year: ' + str(year)
+        elif last_n_days:
+            filter_desc = {'last_n_days': last_n_days}
+            filter_label = 'last ' + str(last_n_days) + ' days'
+        else:
+            filter_desc = None
+            filter_label = None
+
         report_data = {
             'type': 'monthly_breakdown',
             'monthly_usage': monthly_usage,
-            'filter': {'year': year} if year else None
+            'filter': filter_desc,
+            'filter_label': filter_label
         }
 
         if output_format == "table":
             self._display_monthly_breakdown_table(monthly_usage, breakdown)
         elif output_format == "json":
-            return self._format_monthly_breakdown_json(monthly_usage)
+            result = self._format_monthly_breakdown_json(monthly_usage)
+            result['type'] = 'monthly_breakdown'
+            result['filter'] = filter_desc
+            result['filter_label'] = filter_label
+            return result
         elif output_format == "csv":
             return self._format_monthly_breakdown_csv(monthly_usage)
 

@@ -188,6 +188,23 @@ class TimeUtils:
         return TimeUtils.get_week_range(year, week)
 
     @staticmethod
+    def get_last_n_days_range(days: int) -> Tuple[date, date]:
+        """Get the date range for the last N days (inclusive of today).
+
+        Args:
+            days: Number of days to go back
+
+        Returns:
+            Tuple of (start_date, end_date) where end_date is today
+        """
+        if days <= 0:
+            raise ValueError('days must be a positive integer')
+
+        today = date.today()
+        start_date = today - timedelta(days=days - 1)
+        return start_date, today
+
+    @staticmethod
     def get_custom_week_start(target_date: date, week_start_day: int = 0) -> date:
         """Get the start date of the week containing target_date.
 

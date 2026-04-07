@@ -37,6 +37,22 @@ def json_serializer(obj):
         return str(obj)
 
 
+def parse_period(ctx, param, value):
+    """Handle --month/--year with optional value."""
+    if value == "LAST_N_DAYS":
+        return "LAST_N_DAYS"
+    if value is not None:
+        if param.name == "year":
+            if not isinstance(value, str) or not value.isdigit() or len(value) != 4:
+                raise click.BadParameter("Year must be a valid YYYY format (e.g., 2024)")
+            year_int = int(value)
+            if year_int < 1:
+                raise click.BadParameter("Year must be a valid YYYY format (e.g., 2024)")
+            return year_int
+        return value
+    return None
+
+
 @contextmanager
 def cli_error_context(ctx: click.Context, operation_name: str):
     """Context manager for consistent CLI error handling across all commands.
@@ -577,7 +593,11 @@ def live(
 
 @cli.command()
 @click.argument("path", type=click.Path(exists=True), required=False)
-@click.option("--month", type=str, help="Month to analyze (YYYY-MM format)")
+@click.option("--month", is_flag=False, flag_value="LAST_N_DAYS", default=None, callback=parse_period,
+              help="Month to analyze (YYYY-MM format) or bare for last 30 days")
+@click.option("--week", "last_week", is_flag=True, help="Show last 7 days")
+@click.option("--year", is_flag=False, flag_value="LAST_N_DAYS", default=None, callback=parse_period,
+              help="Year to analyze (YYYY) or bare for last 365 days")
 @click.option(
     "--format",
     "-f",
@@ -592,6 +612,8 @@ def daily(
     ctx: click.Context,
     path: Optional[str],
     month: Optional[str],
+    last_week: bool,
+    year: Optional[int],
     output_format: str,
     breakdown: bool,
 ):
@@ -599,13 +621,39 @@ def daily(
 
     PATH: Path to directory containing session folders
           (defaults to configured messages directory)
+
+    Use --week, --month, or --year (bare for last periods) to show recent periods.
     """
-    path = resolve_path(path, default_to_messages_dir=True)
+    config = ctx.obj["config"]
+
+    if not path:
+        path = config.paths.messages_dir
+
+    period_opts = 0
+    if month is not None:
+        period_opts += 1
+    if last_week:
+        period_opts += 1
+    if year is not None:
+        period_opts += 1
+    if period_opts > 1:
+        raise click.UsageError("Options --week, --month, and --year are mutually exclusive")
+
+    last_n_days = None
+    year_filter = None
+    if month == "LAST_N_DAYS":
+        last_n_days = 30
+    elif last_week:
+        last_n_days = 7
+    elif year == "LAST_N_DAYS":
+        last_n_days = 365
+    elif year:
+        year_filter = year
 
     with cli_error_context(ctx, "generating daily breakdown"):
         report_generator = ctx.obj["report_generator"]
         result = report_generator.generate_daily_report(
-            path, month, output_format, breakdown
+            path, None if month == "LAST_N_DAYS" else month, output_format, breakdown, last_n_days, year_filter
         )
 
         handle_output_format(result, output_format)
@@ -613,7 +661,10 @@ def daily(
 
 @cli.command()
 @click.argument("path", type=click.Path(exists=True), required=False)
-@click.option("--year", type=int, help="Year to analyze")
+@click.option("--year", is_flag=False, flag_value="LAST_N_DAYS", default=None, callback=parse_period,
+              help="Year to analyze (YYYY) or bare for last 365 days")
+@click.option("--month", is_flag=False, flag_value="LAST_N_DAYS", default=None, callback=parse_period,
+              help="Month to analyze (YYYY-MM) or bare for last 30 days")
 @click.option(
     "--start-day",
     type=click.Choice(
@@ -637,6 +688,7 @@ def weekly(
     ctx: click.Context,
     path: Optional[str],
     year: Optional[int],
+    month: Optional[str],
     start_day: str,
     output_format: str,
     breakdown: bool,
@@ -646,22 +698,36 @@ def weekly(
     PATH: Path to directory containing session folders
           (defaults to configured messages directory)
 
-    Examples:
-        ocmonitor weekly                    # Default (Monday start)
-        ocmonitor weekly --start-day sunday # Sunday to Sunday weeks
-        ocmonitor weekly --start-day friday # Friday to Friday weeks
+    Use --month or --year (bare for last periods) to show recent periods.
     """
-    path = resolve_path(path, default_to_messages_dir=True)
+    config = ctx.obj["config"]
 
-    # Convert day name to weekday number
+    if not path:
+        path = config.paths.messages_dir
+
+    if month is not None and year is not None:
+        raise click.UsageError("Options --month and --year are mutually exclusive")
+
     from .utils.time_utils import WEEKDAY_MAP
 
     week_start_day = WEEKDAY_MAP[start_day.lower()]
 
+    last_n_days = None
+    year_filter = None
+    month_filter = None
+    if month and month != "LAST_N_DAYS":
+        month_filter = month
+    elif year == "LAST_N_DAYS":
+        last_n_days = 365
+    elif month == "LAST_N_DAYS":
+        last_n_days = 30
+    elif year:
+        year_filter = year
+
     with cli_error_context(ctx, "generating weekly breakdown"):
         report_generator = ctx.obj["report_generator"]
         result = report_generator.generate_weekly_report(
-            path, year, output_format, breakdown, week_start_day
+            path, year_filter, month_filter, output_format, breakdown, week_start_day, last_n_days
         )
 
         handle_output_format(result, output_format)
@@ -669,7 +735,8 @@ def weekly(
 
 @cli.command()
 @click.argument("path", type=click.Path(exists=True), required=False)
-@click.option("--year", type=int, help="Year to analyze")
+@click.option("--year", is_flag=False, flag_value="LAST_N_DAYS", default=None, callback=parse_period,
+              help="Year to analyze (YYYY) or bare for last 365 days")
 @click.option(
     "--format",
     "-f",
@@ -691,13 +758,25 @@ def monthly(
 
     PATH: Path to directory containing session folders
           (defaults to configured messages directory)
+
+    Use --year (bare for last periods) to show recent periods.
     """
-    path = resolve_path(path, default_to_messages_dir=True)
+    config = ctx.obj["config"]
+
+    if not path:
+        path = config.paths.messages_dir
+
+    last_n_days = None
+    year_filter = None
+    if year == "LAST_N_DAYS":
+        last_n_days = 365
+    elif year:
+        year_filter = year
 
     with cli_error_context(ctx, "generating monthly breakdown"):
         report_generator = ctx.obj["report_generator"]
         result = report_generator.generate_monthly_report(
-            path, year, output_format, breakdown
+            path, year_filter, output_format, breakdown, last_n_days
         )
 
         handle_output_format(result, output_format)
