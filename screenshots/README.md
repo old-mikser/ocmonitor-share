@@ -49,18 +49,18 @@ This directory contains screenshots used in the README.md and DOCUMENTATION.md f
 - **Recommended Size**: 800x600px or similar
 
 #### `config-validation.png`
-- **Command**: `ocmonitor config validate`
-- **Description**: Screenshot showing configuration validation results
+- **Command**: `ocmonitor config show`
+- **Description**: Screenshot showing that the configuration loads successfully
 - **Recommended Size**: 800x600px or similar
 
 #### `config-diagnosis.png`
-- **Command**: `ocmonitor config diagnose`
-- **Description**: Screenshot showing configuration diagnosis with recommendations
+- **Command**: `ocmonitor config show`
+- **Description**: Screenshot showing the configuration values used for troubleshooting
 - **Recommended Size**: 800x600px or similar
 
 #### `system-info.png`
-- **Command**: `ocmonitor config system-info`
-- **Description**: Screenshot showing system information for bug reports
+- **Command**: `ocmonitor --version`
+- **Description**: Screenshot showing the installed OpenCode Monitor version
 - **Recommended Size**: 800x600px or similar
 
 ## 📝 How to Add Screenshots

@@ -1643,121 +1643,80 @@ ocmonitor config show
    Recent Sessions Limit: 50
 ```
 
-#### Show Specific Configuration Sections
+#### Show Current Configuration
 
 ```bash
-# Show only paths configuration
-ocmonitor config show --section paths
-
-# Show UI settings
-ocmonitor config show --section ui
-
-# Show model configuration
-ocmonitor config show --section models
+# Show the full active configuration
+ocmonitor config show
 ```
+
+`ocmonitor config show` currently displays the full configuration. Section filtering options such as `--section` are not available in v1.0.3.
 
 ### Validating Configuration
 
-#### Check Configuration Validity
+There is currently no separate `ocmonitor config validate` command. Configuration is validated automatically whenever `ocmonitor` starts and loads `config.toml`.
+
+#### Check That Configuration Loads
 
 ```bash
-# Validate configuration files
-ocmonitor config validate
+# Load and display the active configuration
+ocmonitor config show
 ```
 
-**Example Output:**
+If the config file has invalid TOML syntax or unsupported values, `ocmonitor` will exit with an error before running the command.
 
-
-**Text Output Example:**
-```
-✅ Configuration validation successful
-
-📋 Validation Results:
-   ✅ config.toml: Valid TOML format
-   ✅ models.json: Valid JSON format
-   ✅ Paths: All directories accessible
-   ✅ Models: 6 models configured correctly
-   ✅ Quotas: Quota limits properly formatted
-
-🔍 Configuration Details:
-   Config File: /path/to/config.toml
-   Models File: /path/to/models.json
-   Messages Directory: ~/.local/share/opencode/storage/message (exists)
-   Export Directory: ./exports (will be created)
-```
-
-#### Diagnose Configuration Issues
+#### Common Validation Checks
 
 ```bash
-# Comprehensive configuration diagnosis
-ocmonitor config diagnose
-```
-
-**Example Output:**
-
-
-**Text Output Example:**
-```
-🔍 Configuration Diagnosis
-
-✅ Configuration Files:
-   ✅ config.toml found and valid
-   ✅ models.json found and valid
-
-⚠️  Path Issues:
-   ⚠️  Messages directory not found: ~/.local/share/opencode/storage/message
-   💡 Suggestion: Check if OpenCode is installed and has been run
-
-✅ Model Configuration:
-   ✅ 6 models configured
-   ✅ All required fields present
-   ✅ Valid pricing data
-
-🔧 Recommendations:
-   1. Verify OpenCode installation
-   2. Run OpenCode at least once to create message directory
-   3. Consider setting custom messages_dir if using different location
+# Show the full configuration
+ocmonitor config show
 ```
 
 ### Updating Configuration
 
 #### Set Configuration Values
 
+`ocmonitor config set` exists in the CLI help, but it is currently a placeholder and does not write changes yet.
+
+For now, edit the configuration file directly:
+
 ```bash
-# Set messages directory
-ocmonitor config set paths.messages_dir "/custom/path/to/messages"
+# Edit the user config file directly
+$EDITOR ~/.config/ocmonitor/config.toml
 
-# Set default export format
-ocmonitor config set export.default_format "json"
-
-# Enable/disable UI features
-ocmonitor config set ui.colors true
-ocmonitor config set ui.progress_bars false
-
-# Set live refresh interval
-ocmonitor config set ui.live_refresh_interval 10
+# Then verify the updated config loads correctly
+ocmonitor config show
 ```
 
 #### Reset Configuration
 
+There is currently no `ocmonitor config reset` command.
+
+To reset to defaults, remove or rename your custom config file and rerun `ocmonitor`:
+
 ```bash
-# Reset to default configuration
-ocmonitor config reset
+# Back up your user config
+mv ~/.config/ocmonitor/config.toml ~/.config/ocmonitor/config.toml.bak
 
-# Reset specific section
-ocmonitor config reset --section ui
-
-# Backup current config before reset
-ocmonitor config reset --backup
+# Confirm the app now loads with default settings
+ocmonitor config show
 ```
+
+If you use a project-local `config.toml` or `ocmonitor.toml`, remove or rename that file instead.
 
 ### Configuration File Locations
 
 #### Find Configuration Files
 
-```bash
-# Show configuration file paths
-ocmonitor config paths
+There is currently no `ocmonitor config paths` command.
+
+`ocmonitor` searches for configuration files in this order:
+
+```text
+~/.config/ocmonitor/config.toml
+./config.toml
+./ocmonitor.toml
+packaged default config bundled with ocmonitor
 ```
 
 **Example Output:**
@@ -1909,11 +1868,11 @@ find ~ -name "opencode" -type d 2>/dev/null
 # Check OpenCode configuration
 opencode config list 2>/dev/null | grep storage
 
-# Set custom path if different location
-ocmonitor config set paths.messages_dir "/actual/path/to/messages"
+# Set the messages directory by editing config.toml directly
+$EDITOR ~/.config/ocmonitor/config.toml
 
-# Verify path is accessible
-ocmonitor config validate
+# Verify the configuration loads correctly
+ocmonitor config show
 ```
 
 #### 5. JSON Parsing Errors
@@ -1955,8 +1914,8 @@ chmod -R 755 ~/.local/share/opencode/storage/message
 mkdir -p ./exports
 touch ./exports/test.txt && rm ./exports/test.txt
 
-# Use alternative export directory
-ocmonitor config set export.export_dir "/tmp/ocmonitor-exports"
+# Use an alternative export directory by editing config.toml directly
+$EDITOR ~/.config/ocmonitor/config.toml
 ```
 
 #### 7. Model Not Recognized
@@ -1967,7 +1926,7 @@ ocmonitor config set export.export_dir "/tmp/ocmonitor-exports"
 
 ```bash
 # Check which models are configured
-ocmonitor config show --section models
+ocmonitor config show
 
 # View current models.json
 cat models.json
@@ -1978,8 +1937,8 @@ grep -r "model.*:" ~/.local/share/opencode/storage/message | grep -v claude | gr
 # Add missing model to models.json
 # Edit models.json and add the new model configuration
 
-# Validate models configuration
-ocmonitor config validate
+# Verify the models configuration loads correctly
+ocmonitor config show
 ```
 
 #### 8. Export Failures
@@ -2024,8 +1983,8 @@ ocmonitor sessions --source sqlite
 # Check for legacy files (pre-v1.2.0)
 ls -la ~/.local/share/opencode/storage/message/
 
-# Update configuration to specify database location
-ocmonitor config set paths.database_file "/custom/path/to/opencode.db"
+# Update the database location by editing config.toml directly
+$EDITOR ~/.config/ocmonitor/config.toml
 ```
 
 **Note:** OpenCode v1.2.0+ stores sessions in SQLite at `~/.local/share/opencode/opencode.db`. The tool automatically detects and prefers SQLite when available, falling back to legacy files only when SQLite is not found.
@@ -2043,41 +2002,15 @@ export OCMONITOR_DEBUG=1
 ocmonitor sessions ~/.local/share/opencode/storage/message
 ```
 
-#### Check System Information
+#### Collect System Information
+
+There is currently no `ocmonitor config system-info` command. When reporting issues, include the following command output instead:
 
 ```bash
-# Show system information for bug reports
-ocmonitor config system-info
-```
-
-
-**Text Output Example:**
-```
-🔍 System Information for Bug Reports
-
-Environment:
-   OS: macOS 12.6
-   Architecture: arm64
-   Python Version: 3.9.16
-   OpenCode Monitor Version: 1.0.0
-
-Python Environment:
-   Python Path: /opt/homebrew/bin/python3
-   Site Packages: /opt/homebrew/lib/python3.9/site-packages
-   User Base: /Users/username/Library/Python/3.9
-
-Dependencies:
-   ✅ click: 8.1.7
-   ✅ rich: 13.7.0
-   ✅ pydantic: 2.5.2
-   ✅ toml: 0.10.2
-
-Configuration:
-   Config File: ./config.toml (exists)
-   Models File: ./models.json (exists)
-   Messages Dir: ~/.local/share/opencode/storage/message (accessible)
-
-Recent Errors: None
+ocmonitor --version
+python3 --version
+uname -a
+ocmonitor config show
 ```
 
 ### Getting Help
@@ -2088,7 +2021,9 @@ When reporting issues, include:
 
 1. **System Information:**
    ```bash
-   ocmonitor config system-info
+   ocmonitor --version
+   python3 --version
+   uname -a
    ```
 
 2. **Error Messages:** Full error output with `--verbose` flag
