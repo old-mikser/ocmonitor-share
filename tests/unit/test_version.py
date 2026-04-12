@@ -14,7 +14,7 @@ class TestVersionResolution:
         def fake_distribution_version(name):
             calls.append(name)
             if name == "opencode-monitor":
-                return "1.0.3"
+                return "1.0.4"
             raise PackageNotFoundError(name)
 
         monkeypatch.setattr(
@@ -23,7 +23,7 @@ class TestVersionResolution:
             fake_distribution_version,
         )
 
-        assert version_module.get_version() == "1.0.3"
+        assert version_module.get_version() == "1.0.4"
         assert calls == ["opencode-monitor"]
 
     def test_uses_local_fallback_when_metadata_missing(self, monkeypatch):
