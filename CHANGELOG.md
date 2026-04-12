@@ -5,6 +5,22 @@ All notable changes to OpenCode Monitor will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.4] - 2026-04-12
+
+### ✨ Improvements
+
+- Add `--recalculate` flag to `session`, `sessions`, `daily`, `weekly`, and `monthly` commands to recalculate costs using current pricing instead of stored values
+- Add `--week`, `--month`, and `--year` bare flags for filtering recent periods (last 7 days, 30 days, 365 days respectively)
+- Add `--month` and `--year` parameters with `last_n_days` support to `weekly` and `monthly` commands
+- Add Cache Write and Cache Read columns to model breakdown tables
+- Fix timeframe parameter handling for period filters
+
+### 🙏 Acknowledgements
+
+Thanks to our contributors for this release:
+
+- **[@old-mikser](https://github.com/old-mikser)** - Added bare --week/--month/--year flags for recent period filtering ([#35](https://github.com/Shlomob/ocmonitor-share/pull/35))
+
 ## [1.0.3] - 2026-03-26
 
 ### 🐛 Bug Fixes
@@ -426,6 +442,7 @@ ocmonitor export <type>    # Data export functionality
 
 ## Version History Summary
 
+- **v1.0.4** - Added --recalculate flag and bare --week/--month/--year flags for recent period filtering; Cache Write/Read columns in model breakdown
 - **v1.0.3** - Bug fixes for config encoding, workflow aggregation, and SQL queries; version metadata resolution
 - **v1.0.2** - Currency conversion (USD, GBP, EUR, JPY, CNY, INR) with live rates
 - **v1.0.1** - Prometheus `/metrics` endpoint for Grafana integration
