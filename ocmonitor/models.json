@@ -80,6 +80,14 @@
     "contextWindow": 200000,
     "sessionQuota": 0.0
   },
+  "glm-5.1": {
+    "input": 1.4,
+    "output": 4.4,
+    "cacheWrite": 0.0,
+    "cacheRead": 0.26,
+    "contextWindow": 200000,
+    "sessionQuota": 0.0
+  },
   "glm-4.7-free": {
     "input": 0.6,
     "output": 2.2,
@@ -117,6 +125,22 @@
     "output": 1.5,
     "cacheWrite": 0.0,
     "cacheRead": 0.0,
+    "contextWindow": 256000,
+    "sessionQuota": 0.0
+  },
+  "qwen3.6-plus-free": {
+    "input": 0.5,
+    "output": 3.0,
+    "cacheWrite": 0.0,
+    "cacheRead": 0.1,
+    "contextWindow": 256000,
+    "sessionQuota": 0.0
+  },
+  "qwen3.6-plus": {
+    "input": 0.5,
+    "output": 3.0,
+    "cacheWrite": 0.0,
+    "cacheRead": 0.1,
     "contextWindow": 256000,
     "sessionQuota": 0.0
   },
