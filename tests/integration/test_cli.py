@@ -46,6 +46,222 @@ def mock_sessions_dir(tmp_path):
     return sessions_dir
 
 
+class TestSessionRecalculate:
+    """Tests for --recalculate flag propagation in session commands."""
+
+    @pytest.fixture
+    def sessions_dir_with_stored_cost(self, tmp_path):
+        """Create mock sessions with stored cost different from computed cost."""
+        sessions_dir = tmp_path / "message"
+        sessions_dir.mkdir()
+
+        # Create session with minimax-m2.5 model and explicit stored cost
+        # Stored cost: 0.042 (deliberately different)
+        # Computed cost: 1M * 0.3 + 1M * 1.2 = $1.50 (using actual pricing from models.json)
+        session1 = sessions_dir / "ses_test1"
+        session1.mkdir()
+
+        inter1 = session1 / "inter_0001.json"
+        inter1.write_text(json.dumps({
+            "modelID": "minimax-m2.5",
+            "cost": 0.042,
+            "tokens": {"input": 1000000, "output": 1000000, "cache": {"write": 0, "read": 0}},
+            "timeData": {"created": 1700000000000, "completed": 1700003600000},
+            "projectPath": "/home/user/project1",
+            "agent": "main"
+        }))
+
+        return sessions_dir, session1
+
+    def test_session_json_recalculate_flag_is_propagated(self, sessions_dir_with_stored_cost):
+        """Test session --recalculate --format json sets recalculated flag correctly."""
+        sessions_dir, session_dir = sessions_dir_with_stored_cost
+
+        runner = CliRunner()
+
+        # Without --recalculate
+        result_no_recalc = runner.invoke(cli, ['session', str(session_dir), '--format', 'json'])
+        assert result_no_recalc.exit_code == 0
+        data_no_recalc = json.loads(result_no_recalc.output)
+        assert data_no_recalc['recalculated'] is False
+
+        # With --recalculate
+        result_recalc = runner.invoke(cli, ['session', str(session_dir), '--format', 'json', '--recalculate'])
+        assert result_recalc.exit_code == 0
+        data_recalc = json.loads(result_recalc.output)
+        assert data_recalc['recalculated'] is True
+
+    def test_session_csv_uses_export_message(self, sessions_dir_with_stored_cost):
+        """Test session --format csv tells user to use export command (CLI limitation)."""
+        sessions_dir, session_dir = sessions_dir_with_stored_cost
+
+        runner = CliRunner()
+
+        result = runner.invoke(cli, ['session', str(session_dir), '--format', 'csv', '--recalculate'])
+        assert result.exit_code == 0
+        # CLI currently shows a message to use export command for CSV format
+        assert "export" in result.output.lower()
+
+
+class TestSessionsRecalculate:
+    """Tests for --recalculate flag propagation in sessions commands."""
+
+    @pytest.fixture
+    def sessions_dir_with_stored_cost(self, tmp_path):
+        """Create mock sessions with stored cost different from computed cost."""
+        sessions_dir = tmp_path / "message"
+        sessions_dir.mkdir()
+
+        session1 = sessions_dir / "ses_test1"
+        session1.mkdir()
+        inter1 = session1 / "inter_0001.json"
+        inter1.write_text(json.dumps({
+            "modelID": "minimax-m2.5",
+            "cost": 0.042,
+            "tokens": {"input": 1000000, "output": 1000000, "cache": {"write": 0, "read": 0}},
+            "timeData": {"created": 1700000000000, "completed": 1700003600000},
+            "projectPath": "/home/user/project1",
+            "agent": "main"
+        }))
+
+        return sessions_dir
+
+    def test_sessions_json_recalculate_flag_is_propagated(self, sessions_dir_with_stored_cost):
+        """Test sessions --recalculate --format json sets recalculated flag correctly.
+        
+        This tests the ReportGenerator directly since CLI output is mixed with 
+        console messages when using SQLite data source.
+        """
+        sessions_dir = sessions_dir_with_stored_cost
+
+        # Test ReportGenerator directly
+        from ocmonitor.services.session_analyzer import SessionAnalyzer
+        from ocmonitor.services.report_generator import ReportGenerator
+        from decimal import Decimal
+        
+        # Load pricing data
+        from ocmonitor.config import ConfigManager
+        config_manager = ConfigManager()
+        pricing_data = config_manager.load_pricing_data()
+        
+        analyzer = SessionAnalyzer(pricing_data)
+        report_gen = ReportGenerator(analyzer)
+        
+        # Get sessions from the temp dir
+        sessions = analyzer.analyze_all_sessions(str(sessions_dir))
+        if not sessions:
+            pytest.skip("No sessions loaded from temp dir")
+        
+        # Test JSON output with force_recalculate=False
+        result_no_recalc = report_gen.generate_sessions_summary_report(
+            str(sessions_dir), output_format="json", force_recalculate=False
+        )
+        assert result_no_recalc['recalculated'] is False
+        
+        # Test JSON output with force_recalculate=True  
+        result_recalc = report_gen.generate_sessions_summary_report(
+            str(sessions_dir), output_format="json", force_recalculate=True
+        )
+        assert result_recalc['recalculated'] is True
+
+    def test_sessions_csv_recalculate_flag_is_propagated(self, sessions_dir_with_stored_cost):
+        """Test sessions --recalculate --format csv sets recalculated flag correctly."""
+        sessions_dir = sessions_dir_with_stored_cost
+
+        # Test ReportGenerator directly
+        from ocmonitor.services.session_analyzer import SessionAnalyzer
+        from ocmonitor.services.report_generator import ReportGenerator
+        
+        from ocmonitor.config import ConfigManager
+        config_manager = ConfigManager()
+        pricing_data = config_manager.load_pricing_data()
+        
+        analyzer = SessionAnalyzer(pricing_data)
+        report_gen = ReportGenerator(analyzer)
+        
+        # Test CSV output with force_recalculate=True
+        result = report_gen.generate_sessions_summary_report(
+            str(sessions_dir), output_format="csv", force_recalculate=True
+        )
+        # Should return list of CSV rows
+        assert isinstance(result, list)
+        assert len(result) >= 1  # At least one row of data
+
+
+class TestSessionsRecalculate:
+    """Tests for --recalculate flag propagation in sessions commands."""
+
+    @pytest.fixture
+    def sessions_dir_with_stored_cost(self, tmp_path):
+        """Create mock sessions with stored cost different from computed cost."""
+        sessions_dir = tmp_path / "message"
+        sessions_dir.mkdir()
+
+        session1 = sessions_dir / "ses_test1"
+        session1.mkdir()
+        inter1 = session1 / "inter_0001.json"
+        inter1.write_text(json.dumps({
+            "modelID": "minimax-m2.5",
+            "cost": 0.042,
+            "tokens": {"input": 1000000, "output": 1000000, "cache": {"write": 0, "read": 0}},
+            "timeData": {"created": 1700000000000, "completed": 1700003600000},
+            "projectPath": "/home/user/project1",
+            "agent": "main"
+        }))
+
+        return sessions_dir
+
+    def test_sessions_json_recalculate_flag_is_propagated(self, sessions_dir_with_stored_cost):
+        """Test sessions --recalculate --format json sets recalculated flag correctly."""
+        sessions_dir = sessions_dir_with_stored_cost
+
+        # Test ReportGenerator directly since CLI data source causes mixed output
+        from ocmonitor.services.session_analyzer import SessionAnalyzer
+        from ocmonitor.services.report_generator import ReportGenerator
+        
+        from ocmonitor.config import ConfigManager
+        config_manager = ConfigManager()
+        pricing_data = config_manager.load_pricing_data()
+        
+        analyzer = SessionAnalyzer(pricing_data)
+        report_gen = ReportGenerator(analyzer)
+        
+        # Test JSON output with force_recalculate=False
+        result_no_recalc = report_gen.generate_sessions_summary_report(
+            str(sessions_dir), output_format="json", force_recalculate=False
+        )
+        assert result_no_recalc['recalculated'] is False
+        
+        # Test JSON output with force_recalculate=True  
+        result_recalc = report_gen.generate_sessions_summary_report(
+            str(sessions_dir), output_format="json", force_recalculate=True
+        )
+        assert result_recalc['recalculated'] is True
+
+    def test_sessions_csv_recalculate_flag_is_propagated(self, sessions_dir_with_stored_cost):
+        """Test sessions --recalculate --format csv sets recalculated flag correctly."""
+        sessions_dir = sessions_dir_with_stored_cost
+
+        # Test ReportGenerator directly
+        from ocmonitor.services.session_analyzer import SessionAnalyzer
+        from ocmonitor.services.report_generator import ReportGenerator
+        
+        from ocmonitor.config import ConfigManager
+        config_manager = ConfigManager()
+        pricing_data = config_manager.load_pricing_data()
+        
+        analyzer = SessionAnalyzer(pricing_data)
+        report_gen = ReportGenerator(analyzer)
+        
+        # Test CSV output with force_recalculate=True
+        result = report_gen.generate_sessions_summary_report(
+            str(sessions_dir), output_format="csv", force_recalculate=True
+        )
+        # Should return list of CSV rows
+        assert isinstance(result, list)
+        assert len(result) >= 1  # At least one row of data
+
+
 class TestConfigCommand:
     """Tests for config CLI commands."""
     

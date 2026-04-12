@@ -48,7 +48,8 @@ class TableFormatter:
         """Get color for cost based on quota using semantic theme tags."""
         return ColorFormatter.get_cost_color(cost, quota, default_style="table.row.main")
 
-    def create_sessions_table(self, sessions: List[SessionData], pricing_data: Dict[str, Any]) -> Table:
+    def create_sessions_table(self, sessions: List[SessionData], pricing_data: Dict[str, Any],
+                         force_recalculate: bool = False) -> Table:
         """Create a table for multiple sessions using semantic theme styles."""
         table = Table(
             title="OpenCode Sessions Summary",
@@ -78,7 +79,7 @@ class TableFormatter:
         all_interaction_rates: list[float] = []
 
         for session in sorted_sessions:
-            session_cost = session.calculate_total_cost(pricing_data)
+            session_cost = session.calculate_total_cost(pricing_data, force_recalculate)
             session_tokens = session.total_tokens
 
             # Update totals
@@ -90,7 +91,7 @@ class TableFormatter:
             total_cost += session_cost
 
             # Get model breakdown for session
-            model_breakdown = session.get_model_breakdown(pricing_data)
+            model_breakdown = session.get_model_breakdown(pricing_data, force_recalculate)
 
             # Add rows for each model
             for i, (model, stats) in enumerate(model_breakdown.items()):
@@ -163,7 +164,8 @@ class TableFormatter:
 
         return table
 
-    def create_session_table(self, session: SessionData, pricing_data: Dict[str, Any]) -> Table:
+    def create_session_table(self, session: SessionData, pricing_data: Dict[str, Any],
+                        force_recalculate: bool = False) -> Table:
         """Create a table for a single session using semantic theme styles."""
         table = Table(
             title=f"Session: {session.display_title}",
@@ -187,7 +189,7 @@ class TableFormatter:
         total_tokens = TokenUsage()
 
         for file in session.files:
-            cost = file.calculate_cost(pricing_data)
+            cost = file.calculate_cost(pricing_data, force_recalculate)
             total_cost += cost
             total_tokens.input += file.tokens.input
             total_tokens.output += file.tokens.output
@@ -228,7 +230,8 @@ class TableFormatter:
 
         return table
 
-    def create_daily_table(self, daily_usage: List[DailyUsage], pricing_data: Dict[str, Any]) -> Table:
+    def create_daily_table(self, daily_usage: List[DailyUsage], pricing_data: Dict[str, Any],
+                      force_recalculate: bool = False) -> Table:
         """Create a table for daily usage breakdown using semantic theme styles."""
         table = Table(
             title="Daily Usage Breakdown",
@@ -253,7 +256,7 @@ class TableFormatter:
         total_cost = Decimal('0.0')
 
         for day in daily_usage:
-            day_cost = day.calculate_total_cost(pricing_data)
+            day_cost = day.calculate_total_cost(pricing_data, force_recalculate)
             day_tokens = day.total_tokens
 
             total_sessions += len(day.sessions)
@@ -353,7 +356,8 @@ class TableFormatter:
         """Format duration in milliseconds to hours and minutes format."""
         return TimeUtils.format_duration_hm(milliseconds)
 
-    def create_summary_panel(self, sessions: List[SessionData], pricing_data: Dict[str, Any]) -> Panel:
+    def create_summary_panel(self, sessions: List[SessionData], pricing_data: Dict[str, Any],
+                        force_recalculate: bool = False) -> Panel:
         """Create a summary panel with key metrics using semantic theme styles."""
         if not sessions:
             return Panel("No sessions found", title="Summary", title_align="left")
@@ -370,7 +374,7 @@ class TableFormatter:
             total_tokens.output += session_tokens.output
             total_tokens.cache_write += session_tokens.cache_write
             total_tokens.cache_read += session_tokens.cache_read
-            total_cost += session.calculate_total_cost(pricing_data)
+            total_cost += session.calculate_total_cost(pricing_data, force_recalculate)
             models_used.update(session.models_used)
 
         # Create summary text using semantic tags

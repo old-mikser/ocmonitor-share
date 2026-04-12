@@ -82,11 +82,12 @@ class SessionAnalyzer:
         path = Path(session_path)
         return FileProcessor.load_session_data(path)
 
-    def get_sessions_summary(self, sessions: List[SessionData]) -> Dict[str, Any]:
+    def get_sessions_summary(self, sessions: List[SessionData], force_recalculate: bool = False) -> Dict[str, Any]:
         """Generate summary statistics for multiple sessions.
 
         Args:
             sessions: List of sessions to summarize
+            force_recalculate: If True, ignore stored costs and recalculate from pricing data
 
         Returns:
             Dictionary with summary statistics
@@ -115,7 +116,7 @@ class SessionAnalyzer:
             total_tokens.cache_write += session_tokens.cache_write
             total_tokens.cache_read += session_tokens.cache_read
 
-            total_cost += session.calculate_total_cost(self.pricing_data)
+            total_cost += session.calculate_total_cost(self.pricing_data, force_recalculate)
             total_interactions += session.interaction_count
             models_used.update(session.models_used)
 
@@ -185,7 +186,8 @@ class SessionAnalyzer:
     def create_model_breakdown(self, sessions: List[SessionData],
                              timeframe: str = "all",
                              start_date: Optional[date] = None,
-                             end_date: Optional[date] = None) -> ModelBreakdownReport:
+                             end_date: Optional[date] = None,
+                             force_recalculate: bool = False) -> ModelBreakdownReport:
         """Create model usage breakdown.
 
         Args:
@@ -193,18 +195,20 @@ class SessionAnalyzer:
             timeframe: Timeframe for analysis ("all", "daily", "weekly", "monthly")
             start_date: Start date filter
             end_date: End date filter
+            force_recalculate: If True, ignore stored costs and recalculate from pricing data
 
         Returns:
             ModelBreakdownReport object
         """
         return TimeframeAnalyzer.create_model_breakdown(
-            sessions, self.pricing_data, timeframe, start_date, end_date
+            sessions, self.pricing_data, timeframe, start_date, end_date, force_recalculate
         )
 
     def create_project_breakdown(self, sessions: List[SessionData],
                                timeframe: str = "all",
                                start_date: Optional[date] = None,
-                               end_date: Optional[date] = None) -> ProjectBreakdownReport:
+                               end_date: Optional[date] = None,
+                               force_recalculate: bool = False) -> ProjectBreakdownReport:
         """Create project usage breakdown.
 
         Args:
@@ -212,12 +216,13 @@ class SessionAnalyzer:
             timeframe: Timeframe for analysis ("all", "daily", "weekly", "monthly")
             start_date: Start date filter
             end_date: End date filter
+            force_recalculate: If True, ignore stored costs and recalculate from pricing data
 
         Returns:
             ProjectBreakdownReport object
         """
         return TimeframeAnalyzer.create_project_breakdown(
-            sessions, self.pricing_data, timeframe, start_date, end_date
+            sessions, self.pricing_data, timeframe, start_date, end_date, force_recalculate
         )
 
     def filter_sessions_by_date(self, sessions: List[SessionData],
@@ -276,18 +281,19 @@ class SessionAnalyzer:
         """
         return FileProcessor.get_most_recent_session(base_path)
 
-    def get_session_statistics(self, session: SessionData) -> Dict[str, Any]:
+    def get_session_statistics(self, session: SessionData, force_recalculate: bool = False) -> Dict[str, Any]:
         """Get detailed statistics for a single session.
 
         Args:
             session: Session to analyze
+            force_recalculate: If True, ignore stored costs and recalculate from pricing data
 
         Returns:
             Dictionary with detailed statistics
         """
-        model_breakdown = session.get_model_breakdown(self.pricing_data)
+        model_breakdown = session.get_model_breakdown(self.pricing_data, force_recalculate)
         session_tokens = session.total_tokens
-        total_cost = session.calculate_total_cost(self.pricing_data)
+        total_cost = session.calculate_total_cost(self.pricing_data, force_recalculate)
 
         # Calculate averages
         avg_tokens_per_interaction = session_tokens.total // session.interaction_count if session.interaction_count > 0 else 0
@@ -366,11 +372,12 @@ class SessionAnalyzer:
 
         return 0.0
 
-    def validate_session_health(self, session: SessionData) -> Dict[str, Any]:
+    def validate_session_health(self, session: SessionData, force_recalculate: bool = False) -> Dict[str, Any]:
         """Validate session health and identify potential issues.
 
         Args:
             session: Session to validate
+            force_recalculate: If True, ignore stored costs and recalculate from pricing data
 
         Returns:
             Dictionary with health check results
@@ -394,7 +401,7 @@ class SessionAnalyzer:
             warnings.append(f"Unknown models with no pricing: {', '.join(unknown_models)}")
 
         # Check for very high costs
-        total_cost = session.calculate_total_cost(self.pricing_data)
+        total_cost = session.calculate_total_cost(self.pricing_data, force_recalculate)
         if total_cost > Decimal('50.0'):  # Arbitrary threshold
             warnings.append(f"High session cost: ${total_cost:.2f}")
 

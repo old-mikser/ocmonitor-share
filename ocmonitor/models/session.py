@@ -102,11 +102,8 @@ class InteractionFile(BaseModel):
                 and self.time_data.duration_ms is not None
                 and self.time_data.duration_ms > 0)
 
-    def calculate_cost(self, pricing_data: Dict[str, Any]) -> Decimal:
-        """Calculate cost for this interaction with flexible model name matching.
-
-        Uses OpenCode's stored cost when available. Falls back to local
-        pricing calculation.
+    def _calculate_cost_from_tokens(self, pricing_data: Dict[str, Any]) -> Decimal:
+        """Calculate cost from token usage using pricing data.
 
         Args:
             pricing_data: Dictionary of model pricing information
@@ -114,12 +111,8 @@ class InteractionFile(BaseModel):
         Returns:
             Calculated cost in USD
         """
-        stored_cost = self.raw_data.get('cost')
-        if stored_cost is not None and stored_cost > 0:
-            return Decimal(str(stored_cost))
-
         pricing = None
-        
+
         # First try exact match
         if self.model_id in pricing_data:
             pricing = pricing_data[self.model_id]
@@ -128,7 +121,7 @@ class InteractionFile(BaseModel):
             # e.g., claude-opus-4.5-20251101 -> claude-opus-4.5
             from ..utils.file_utils import FileProcessor
             normalized = FileProcessor._normalize_model_name(self.model_id)
-            
+
             if normalized in pricing_data:
                 pricing = pricing_data[normalized]
             else:
@@ -141,10 +134,10 @@ class InteractionFile(BaseModel):
                            normalized.replace('-extended', '') == key:
                             pricing = pricing_data[key]
                             break
-        
+
         if pricing is None:
             return Decimal('0.0')
-        
+
         cost = Decimal('0.0')
 
         # Convert to cost per million tokens
@@ -156,6 +149,26 @@ class InteractionFile(BaseModel):
         cost += (Decimal(self.tokens.cache_read) / million) * Decimal(str(pricing.cache_read))
 
         return cost
+
+    def calculate_cost(self, pricing_data: Dict[str, Any], force_recalculate: bool = False) -> Decimal:
+        """Calculate cost for this interaction with flexible model name matching.
+
+        Uses OpenCode's stored cost when available unless force_recalculate is True.
+        Falls back to local pricing calculation when stored cost is not available.
+
+        Args:
+            pricing_data: Dictionary of model pricing information
+            force_recalculate: If True, ignore stored cost and recalculate from pricing data
+
+        Returns:
+            Calculated cost in USD
+        """
+        if not force_recalculate:
+            stored_cost = self.raw_data.get('cost')
+            if stored_cost is not None and stored_cost > 0:
+                return Decimal(str(stored_cost))
+
+        return self._calculate_cost_from_tokens(pricing_data)
 
 
 class SessionData(BaseModel):
@@ -246,13 +259,23 @@ class SessionData(BaseModel):
                 total += file.time_data.duration_ms
         return total
 
-    def calculate_total_cost(self, pricing_data: Dict[str, Any]) -> Decimal:
-        """Calculate total cost for the session."""
-        costs = [file.calculate_cost(pricing_data) for file in self.files]
+    def calculate_total_cost(self, pricing_data: Dict[str, Any], force_recalculate: bool = False) -> Decimal:
+        """Calculate total cost for the session.
+
+        Args:
+            pricing_data: Dictionary of model pricing information
+            force_recalculate: If True, ignore stored costs and recalculate from pricing data
+        """
+        costs = [file.calculate_cost(pricing_data, force_recalculate) for file in self.files]
         return Decimal(sum(costs))
 
-    def get_model_breakdown(self, pricing_data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
-        """Get breakdown of usage and cost by model."""
+    def get_model_breakdown(self, pricing_data: Dict[str, Any], force_recalculate: bool = False) -> Dict[str, Dict[str, Any]]:
+        """Get breakdown of usage and cost by model.
+
+        Args:
+            pricing_data: Dictionary of model pricing information
+            force_recalculate: If True, ignore stored costs and recalculate from pricing data
+        """
         breakdown = {}
 
         for model in self.models_used:
@@ -267,7 +290,7 @@ class SessionData(BaseModel):
                 model_tokens.output += file.tokens.output
                 model_tokens.cache_write += file.tokens.cache_write
                 model_tokens.cache_read += file.tokens.cache_read
-                model_cost += file.calculate_cost(pricing_data)
+                model_cost += file.calculate_cost(pricing_data, force_recalculate)
                 if file.time_data and file.time_data.duration_ms:
                     model_duration_ms += file.time_data.duration_ms
                 if file.is_rate_eligible:

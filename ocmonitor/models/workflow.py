@@ -78,17 +78,18 @@ class SessionWorkflow(BaseModel):
         """Get display-friendly workflow title."""
         return self.main_session.display_title
 
-    def calculate_total_cost(self, pricing_data: dict) -> Decimal:
+    def calculate_total_cost(self, pricing_data: dict, force_recalculate: bool = False) -> Decimal:
         """Calculate aggregate cost across all sessions.
 
         Args:
             pricing_data: Dictionary of model pricing information
+            force_recalculate: If True, ignore stored costs and recalculate from pricing data
 
         Returns:
             Total cost in USD
         """
         all_sessions = [self.main_session] + self.sub_agent_sessions
-        return sum(s.calculate_total_cost(pricing_data) for s in all_sessions)
+        return sum(s.calculate_total_cost(pricing_data, force_recalculate) for s in all_sessions)
 
     @computed_field
     @property

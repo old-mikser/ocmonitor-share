@@ -281,8 +281,13 @@ def cli(
     default="table",
     help="Output format",
 )
+@click.option(
+    "--recalculate",
+    is_flag=True,
+    help="Ignore stored OpenCode cost values and recalculate costs using current pricing config",
+)
 @click.pass_context
-def session(ctx: click.Context, path: Optional[str], output_format: str):
+def session(ctx: click.Context, path: Optional[str], output_format: str, recalculate: bool):
     """Analyze a single OpenCode session directory.
 
     PATH: Path to session directory (defaults to current directory)
@@ -291,7 +296,7 @@ def session(ctx: click.Context, path: Optional[str], output_format: str):
 
     with cli_error_context(ctx, "analyzing session"):
         report_generator = ctx.obj["report_generator"]
-        result = report_generator.generate_single_session_report(path, output_format)
+        result = report_generator.generate_single_session_report(path, output_format, recalculate)
 
         if result is None:
             click.echo(
@@ -324,6 +329,11 @@ def session(ctx: click.Context, path: Optional[str], output_format: str):
     default="auto",
     help="Data source: auto (prefer SQLite), sqlite (v1.2.0+), or files (legacy)"
 )
+@click.option(
+    "--recalculate",
+    is_flag=True,
+    help="Ignore stored OpenCode cost values and recalculate costs using current pricing config",
+)
 @click.pass_context
 def sessions(
     ctx: click.Context,
@@ -332,6 +342,7 @@ def sessions(
     limit: Optional[int],
     no_group: bool,
     source: str,
+    recalculate: bool,
 ):
     """Analyze all OpenCode sessions.
 
@@ -364,7 +375,7 @@ def sessions(
             ctx.exit(1)
 
         result = report_generator.generate_sessions_summary_report(
-            path, limit, output_format, group_workflows=not no_group
+            path, limit, output_format, group_workflows=not no_group, force_recalculate=recalculate
         )
 
         handle_output_format(result, output_format)
@@ -607,6 +618,11 @@ def live(
     help="Output format",
 )
 @click.option("--breakdown", is_flag=True, help="Show per-model breakdown")
+@click.option(
+    "--recalculate",
+    is_flag=True,
+    help="Ignore stored OpenCode cost values and recalculate costs using current pricing config",
+)
 @click.pass_context
 def daily(
     ctx: click.Context,
@@ -616,6 +632,7 @@ def daily(
     year: Optional[int],
     output_format: str,
     breakdown: bool,
+    recalculate: bool,
 ):
     """Show daily breakdown of OpenCode usage.
 
@@ -653,7 +670,7 @@ def daily(
     with cli_error_context(ctx, "generating daily breakdown"):
         report_generator = ctx.obj["report_generator"]
         result = report_generator.generate_daily_report(
-            path, None if month == "LAST_N_DAYS" else month, output_format, breakdown, last_n_days, year_filter
+            path, None if month == "LAST_N_DAYS" else month, output_format, breakdown, last_n_days, year_filter, recalculate
         )
 
         handle_output_format(result, output_format)
@@ -683,6 +700,11 @@ def daily(
     help="Output format",
 )
 @click.option("--breakdown", is_flag=True, help="Show per-model breakdown")
+@click.option(
+    "--recalculate",
+    is_flag=True,
+    help="Ignore stored OpenCode cost values and recalculate costs using current pricing config",
+)
 @click.pass_context
 def weekly(
     ctx: click.Context,
@@ -692,6 +714,7 @@ def weekly(
     start_day: str,
     output_format: str,
     breakdown: bool,
+    recalculate: bool,
 ):
     """Show weekly breakdown of OpenCode usage.
 
@@ -727,7 +750,7 @@ def weekly(
     with cli_error_context(ctx, "generating weekly breakdown"):
         report_generator = ctx.obj["report_generator"]
         result = report_generator.generate_weekly_report(
-            path, year_filter, month_filter, output_format, breakdown, week_start_day, last_n_days
+            path, year_filter, month_filter, output_format, breakdown, week_start_day, last_n_days, recalculate
         )
 
         handle_output_format(result, output_format)
@@ -746,6 +769,11 @@ def weekly(
     help="Output format",
 )
 @click.option("--breakdown", is_flag=True, help="Show per-model breakdown")
+@click.option(
+    "--recalculate",
+    is_flag=True,
+    help="Ignore stored OpenCode cost values and recalculate costs using current pricing config",
+)
 @click.pass_context
 def monthly(
     ctx: click.Context,
@@ -753,6 +781,7 @@ def monthly(
     year: Optional[int],
     output_format: str,
     breakdown: bool,
+    recalculate: bool,
 ):
     """Show monthly breakdown of OpenCode usage.
 
@@ -776,7 +805,7 @@ def monthly(
     with cli_error_context(ctx, "generating monthly breakdown"):
         report_generator = ctx.obj["report_generator"]
         result = report_generator.generate_monthly_report(
-            path, year_filter, output_format, breakdown, last_n_days
+            path, year_filter, output_format, breakdown, last_n_days, recalculate
         )
 
         handle_output_format(result, output_format)
@@ -829,6 +858,11 @@ def model(ctx: click.Context, name: str, output_format: str):
     default="table",
     help="Output format",
 )
+@click.option(
+    "--recalculate",
+    is_flag=True,
+    help="Ignore stored OpenCode cost values and recalculate costs using current pricing config",
+)
 @click.pass_context
 def models(
     ctx: click.Context,
@@ -837,6 +871,7 @@ def models(
     start_date: Optional[str],
     end_date: Optional[str],
     output_format: str,
+    recalculate: bool,
 ):
     """Show model usage breakdown and statistics.
 
@@ -848,7 +883,7 @@ def models(
     with cli_error_context(ctx, "generating model breakdown"):
         report_generator = ctx.obj["report_generator"]
         result = report_generator.generate_models_report(
-            path, timeframe, start_date, end_date, output_format
+            path, timeframe, start_date, end_date, output_format, recalculate
         )
 
         handle_output_format(result, output_format)
@@ -872,6 +907,11 @@ def models(
     default="table",
     help="Output format",
 )
+@click.option(
+    "--recalculate",
+    is_flag=True,
+    help="Ignore stored OpenCode cost values and recalculate costs using current pricing config",
+)
 @click.pass_context
 def projects(
     ctx: click.Context,
@@ -880,6 +920,7 @@ def projects(
     start_date: Optional[str],
     end_date: Optional[str],
     output_format: str,
+    recalculate: bool,
 ):
     """Show project usage breakdown and statistics.
 
@@ -891,19 +932,20 @@ def projects(
     with cli_error_context(ctx, "generating project breakdown"):
         report_generator = ctx.obj["report_generator"]
         result = report_generator.generate_projects_report(
-            path, timeframe, start_date, end_date, output_format
+            path, timeframe, start_date, end_date, output_format, recalculate
         )
 
         handle_output_format(result, output_format)
 
 
-def _generate_export_report(report_type: str, path: Optional[str], report_generator) -> Optional[dict]:
+def _generate_export_report(report_type: str, path: Optional[str], report_generator, force_recalculate: bool = False) -> Optional[dict]:
     """Generate report data for export based on report type.
     
     Args:
         report_type: Type of report to generate
         path: Path to analyze
         report_generator: ReportGenerator instance
+        force_recalculate: If True, ignore stored costs and recalculate from pricing data
         
     Returns:
         Report data dictionary or None if report type is invalid
@@ -919,6 +961,9 @@ def _generate_export_report(report_type: str, path: Optional[str], report_genera
     for key in params:
         if params[key] is _PATH_PLACEHOLDER:
             params[key] = path
+    
+    # Add force_recalculate parameter
+    params["force_recalculate"] = force_recalculate
     
     # Get the method from report_generator and call it with unpacked params
     method = getattr(report_generator, method_name)
@@ -964,6 +1009,11 @@ def _display_export_summary(
 )
 @click.option("--output", "-o", type=click.Path(), help="Output file path")
 @click.option("--include-raw", is_flag=True, help="Include raw data in export")
+@click.option(
+    "--recalculate",
+    is_flag=True,
+    help="Ignore stored OpenCode cost values and recalculate costs using current pricing config",
+)
 @click.pass_context
 def export(
     ctx: click.Context,
@@ -972,6 +1022,7 @@ def export(
     export_format: Optional[str],
     output: Optional[str],
     include_raw: bool,
+    recalculate: bool,
 ):
     """Export analysis results to file.
 
@@ -991,7 +1042,7 @@ def export(
         export_service = ctx.obj["export_service"]
 
         # Generate report data using method mapping
-        report_data = _generate_export_report(report_type, path, report_generator)
+        report_data = _generate_export_report(report_type, path, report_generator, recalculate)
 
         if not report_data:
             console.print("[status.error]No data to export.[/status.error]")

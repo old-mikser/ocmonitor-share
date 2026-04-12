@@ -34,11 +34,12 @@ class ReportGenerator:
             return self.currency_converter.format(amount)
         return f"${amount:.2f}"
 
-    def _get_model_breakdown_for_sessions(self, sessions: List[SessionData]) -> List[Dict[str, Any]]:
+    def _get_model_breakdown_for_sessions(self, sessions: List[SessionData], force_recalculate: bool = False) -> List[Dict[str, Any]]:
         """Calculate per-model breakdown for a set of sessions.
 
         Args:
             sessions: List of sessions to analyze
+            force_recalculate: If True, ignore stored costs and recalculate from pricing data
 
         Returns:
             List of model breakdown dicts sorted by cost descending
@@ -66,7 +67,7 @@ class ReportGenerator:
                 model_data[model]['output_tokens'] += file.tokens.output
                 model_data[model]['cache_read'] += file.tokens.cache_read
                 model_data[model]['cache_write'] += file.tokens.cache_write
-                model_data[model]['cost'] += file.calculate_cost(self.analyzer.pricing_data)
+                model_data[model]['cost'] += file.calculate_cost(self.analyzer.pricing_data, force_recalculate)
 
         results = []
         for model, data in model_data.items():
@@ -84,12 +85,14 @@ class ReportGenerator:
 
         return sorted(results, key=lambda x: x['cost'], reverse=True)
 
-    def generate_single_session_report(self, session_path: str, output_format: str = "table") -> Optional[Dict[str, Any]]:
+    def generate_single_session_report(self, session_path: str, output_format: str = "table",
+                                     force_recalculate: bool = False) -> Optional[Dict[str, Any]]:
         """Generate report for a single session.
 
         Args:
             session_path: Path to session directory
             output_format: Output format ("table", "json", "csv")
+            force_recalculate: If True, ignore stored costs and recalculate from pricing data
 
         Returns:
             Report data or None if session not found
@@ -99,28 +102,30 @@ class ReportGenerator:
             return None
 
         # Get detailed statistics
-        stats = self.analyzer.get_session_statistics(session)
-        health = self.analyzer.validate_session_health(session)
+        stats = self.analyzer.get_session_statistics(session, force_recalculate)
+        health = self.analyzer.validate_session_health(session, force_recalculate)
 
         report_data = {
             'type': 'single_session',
             'session': session,
             'statistics': stats,
-            'health': health
+            'health': health,
+            'recalculated': force_recalculate
         }
 
         if output_format == "table":
-            self._display_single_session_table(session, stats, health)
+            self._display_single_session_table(session, stats, health, force_recalculate)
         elif output_format == "json":
-            return self._format_single_session_json(session, stats, health)
+            return self._format_single_session_json(session, stats, health, force_recalculate)
         elif output_format == "csv":
-            return self._format_single_session_csv(session, stats)
+            return self._format_single_session_csv(session, stats, force_recalculate)
 
         return report_data
 
     def generate_sessions_summary_report(self, base_path: str, limit: Optional[int] = None,
                                        output_format: str = "table",
-                                       group_workflows: bool = True) -> Dict[str, Any]:
+                                       group_workflows: bool = True,
+                                       force_recalculate: bool = False) -> Dict[str, Any]:
         """Generate summary report for all sessions.
 
         Args:
@@ -128,35 +133,38 @@ class ReportGenerator:
             limit: Maximum number of sessions to analyze
             output_format: Output format ("table", "json", "csv")
             group_workflows: Group sessions by workflow (main + sub-agents)
+            force_recalculate: If True, ignore stored costs and recalculate from pricing data
 
         Returns:
             Report data
         """
         sessions = self.analyzer.analyze_all_sessions(base_path, limit)
-        summary = self.analyzer.get_sessions_summary(sessions)
+        summary = self.analyzer.get_sessions_summary(sessions, force_recalculate)
 
         report_data = {
             'type': 'sessions_summary',
             'sessions': sessions,
-            'summary': summary
+            'summary': summary,
+            'recalculated': force_recalculate
         }
 
         if output_format == "table":
             if group_workflows:
-                self._display_workflow_sessions_table(sessions, summary)
+                self._display_workflow_sessions_table(sessions, summary, force_recalculate)
             else:
-                self._display_sessions_summary_table(sessions, summary)
+                self._display_sessions_summary_table(sessions, summary, force_recalculate)
         elif output_format == "json":
-            return self._format_sessions_summary_json(sessions, summary)
+            return self._format_sessions_summary_json(sessions, summary, force_recalculate)
         elif output_format == "csv":
-            return self._format_sessions_summary_csv(sessions)
+            return self._format_sessions_summary_csv(sessions, force_recalculate)
 
         return report_data
 
     def generate_daily_report(self, base_path: str, month: Optional[str] = None,
                             output_format: str = "table", breakdown: bool = False,
                             last_n_days: Optional[int] = None,
-                            year: Optional[int] = None) -> Dict[str, Any]:
+                            year: Optional[int] = None,
+                            force_recalculate: bool = False) -> Dict[str, Any]:
         """Generate daily breakdown report.
 
         Args:
@@ -165,6 +173,7 @@ class ReportGenerator:
             output_format: Output format ("table", "json", "csv")
             last_n_days: Optional - if set, filter to last N days
             year: Optional year filter (YYYY)
+            force_recalculate: If True, ignore stored costs and recalculate from pricing data
 
         Returns:
             Report data
@@ -204,19 +213,21 @@ class ReportGenerator:
             'type': 'daily_breakdown',
             'daily_usage': daily_usage,
             'filter': filter_desc,
-            'filter_label': filter_label
+            'filter_label': filter_label,
+            'recalculated': force_recalculate
         }
 
         if output_format == "table":
-            self._display_daily_breakdown_table(daily_usage, breakdown)
+            self._display_daily_breakdown_table(daily_usage, breakdown, force_recalculate)
         elif output_format == "json":
-            result = self._format_daily_breakdown_json(daily_usage)
+            result = self._format_daily_breakdown_json(daily_usage, force_recalculate)
             result['type'] = 'daily_breakdown'
             result['filter'] = filter_desc
             result['filter_label'] = filter_label
+            result['recalculated'] = force_recalculate
             return result
         elif output_format == "csv":
-            return self._format_daily_breakdown_csv(daily_usage)
+            return self._format_daily_breakdown_csv(daily_usage, force_recalculate)
 
         return report_data
 
@@ -224,7 +235,8 @@ class ReportGenerator:
                               month: Optional[str] = None,
                               output_format: str = "table", breakdown: bool = False,
                               week_start_day: int = 0,
-                              last_n_days: Optional[int] = None) -> Dict[str, Any]:
+                              last_n_days: Optional[int] = None,
+                              force_recalculate: bool = False) -> Dict[str, Any]:
         """Generate weekly breakdown report.
 
         Args:
@@ -235,6 +247,7 @@ class ReportGenerator:
             breakdown: Show per-model breakdown
             week_start_day: Day to start week on (0=Monday, 6=Sunday)
             last_n_days: Optional - if set, filter to last N days
+            force_recalculate: If True, ignore stored costs and recalculate from pricing data
 
         Returns:
             Report data
@@ -277,25 +290,28 @@ class ReportGenerator:
             'type': 'weekly_breakdown',
             'weekly_usage': weekly_usage,
             'filter': filter_desc,
-            'filter_label': filter_label
+            'filter_label': filter_label,
+            'recalculated': force_recalculate
         }
 
         if output_format == "table":
-            self._display_weekly_breakdown_table(weekly_usage, breakdown, week_start_day)
+            self._display_weekly_breakdown_table(weekly_usage, breakdown, week_start_day, force_recalculate)
         elif output_format == "json":
-            result = self._format_weekly_breakdown_json(weekly_usage)
+            result = self._format_weekly_breakdown_json(weekly_usage, force_recalculate)
             result['type'] = 'weekly_breakdown'
             result['filter'] = filter_desc
             result['filter_label'] = filter_label
+            result['recalculated'] = force_recalculate
             return result
         elif output_format == "csv":
-            return self._format_weekly_breakdown_csv(weekly_usage)
+            return self._format_weekly_breakdown_csv(weekly_usage, force_recalculate)
 
         return report_data
 
     def generate_monthly_report(self, base_path: str, year: Optional[int] = None,
                               output_format: str = "table", breakdown: bool = False,
-                              last_n_days: Optional[int] = None) -> Dict[str, Any]:
+                              last_n_days: Optional[int] = None,
+                              force_recalculate: bool = False) -> Dict[str, Any]:
         """Generate monthly breakdown report.
 
         Args:
@@ -303,6 +319,7 @@ class ReportGenerator:
             year: Optional year filter
             output_format: Output format ("table", "json", "csv")
             last_n_days: Optional - if set, filter to last N days
+            force_recalculate: If True, ignore stored costs and recalculate from pricing data
 
         Returns:
             Report data
@@ -333,25 +350,28 @@ class ReportGenerator:
             'type': 'monthly_breakdown',
             'monthly_usage': monthly_usage,
             'filter': filter_desc,
-            'filter_label': filter_label
+            'filter_label': filter_label,
+            'recalculated': force_recalculate
         }
 
         if output_format == "table":
-            self._display_monthly_breakdown_table(monthly_usage, breakdown)
+            self._display_monthly_breakdown_table(monthly_usage, breakdown, force_recalculate)
         elif output_format == "json":
-            result = self._format_monthly_breakdown_json(monthly_usage)
+            result = self._format_monthly_breakdown_json(monthly_usage, force_recalculate)
             result['type'] = 'monthly_breakdown'
             result['filter'] = filter_desc
             result['filter_label'] = filter_label
+            result['recalculated'] = force_recalculate
             return result
         elif output_format == "csv":
-            return self._format_monthly_breakdown_csv(monthly_usage)
+            return self._format_monthly_breakdown_csv(monthly_usage, force_recalculate)
 
         return report_data
 
     def generate_models_report(self, base_path: str, timeframe: str = "all",
                              start_date: Optional[str] = None, end_date: Optional[str] = None,
-                             output_format: str = "table") -> Dict[str, Any]:
+                             output_format: str = "table",
+                             force_recalculate: bool = False) -> Dict[str, Any]:
         """Generate model usage breakdown report.
 
         Args:
@@ -360,6 +380,7 @@ class ReportGenerator:
             start_date: Start date (YYYY-MM-DD format)
             end_date: End date (YYYY-MM-DD format)
             output_format: Output format ("table", "json", "csv")
+            force_recalculate: If True, ignore stored costs and recalculate from pricing data
 
         Returns:
             Report data
@@ -372,7 +393,7 @@ class ReportGenerator:
         parsed_end_date = TimeUtils.parse_date_string(end_date) if end_date else None
 
         model_breakdown = self.analyzer.create_model_breakdown(
-            sessions, timeframe, parsed_start_date, parsed_end_date
+            sessions, timeframe, parsed_start_date, parsed_end_date, force_recalculate
         )
 
         report_data = {
@@ -382,15 +403,16 @@ class ReportGenerator:
                 'timeframe': timeframe,
                 'start_date': start_date,
                 'end_date': end_date
-            }
+            },
+            'recalculated': force_recalculate
         }
 
         if output_format == "table":
             self._display_models_breakdown_table(model_breakdown)
         elif output_format == "json":
-            return self._format_models_breakdown_json(model_breakdown)
+            return self._format_models_breakdown_json(model_breakdown, force_recalculate)
         elif output_format == "csv":
-            return self._format_models_breakdown_csv(model_breakdown)
+            return self._format_models_breakdown_csv(model_breakdown, force_recalculate)
 
         return report_data
 
@@ -564,7 +586,8 @@ class ReportGenerator:
 
     def generate_projects_report(self, base_path: str, timeframe: str = "all",
                                start_date: Optional[str] = None, end_date: Optional[str] = None,
-                               output_format: str = "table") -> Dict[str, Any]:
+                               output_format: str = "table",
+                               force_recalculate: bool = False) -> Dict[str, Any]:
         """Generate project usage breakdown report.
 
         Args:
@@ -573,6 +596,7 @@ class ReportGenerator:
             start_date: Start date (YYYY-MM-DD format)
             end_date: End date (YYYY-MM-DD format)
             output_format: Output format ("table", "json", "csv")
+            force_recalculate: If True, ignore stored costs and recalculate from pricing data
 
         Returns:
             Report data
@@ -585,7 +609,7 @@ class ReportGenerator:
         parsed_end_date = TimeUtils.parse_date_string(end_date) if end_date else None
 
         project_breakdown = self.analyzer.create_project_breakdown(
-            sessions, timeframe, parsed_start_date, parsed_end_date
+            sessions, timeframe, parsed_start_date, parsed_end_date, force_recalculate
         )
 
         report_data = {
@@ -595,27 +619,29 @@ class ReportGenerator:
                 'timeframe': timeframe,
                 'start_date': start_date,
                 'end_date': end_date
-            }
+            },
+            'recalculated': force_recalculate
         }
 
         if output_format == "table":
             self._display_projects_breakdown_table(project_breakdown)
         elif output_format == "json":
-            return self._format_projects_breakdown_json(project_breakdown)
+            return self._format_projects_breakdown_json(project_breakdown, force_recalculate)
         elif output_format == "csv":
-            return self._format_projects_breakdown_csv(project_breakdown)
+            return self._format_projects_breakdown_csv(project_breakdown, force_recalculate)
 
         return report_data
 
     # Table display methods
-    def _display_single_session_table(self, session: SessionData, stats: Dict[str, Any], health: Dict[str, Any]):
+    def _display_single_session_table(self, session: SessionData, stats: Dict[str, Any], health: Dict[str, Any],
+                                    force_recalculate: bool = False):
         """Display single session report as table."""
         # Create session details table
-        table = self.table_formatter.create_session_table(session, self.analyzer.pricing_data)
+        table = self.table_formatter.create_session_table(session, self.analyzer.pricing_data, force_recalculate)
         self.console.print(table)
 
         # Create summary panel
-        summary_panel = self.table_formatter.create_summary_panel([session], self.analyzer.pricing_data)
+        summary_panel = self.table_formatter.create_summary_panel([session], self.analyzer.pricing_data, force_recalculate)
         self.console.print(summary_panel)
 
         # Show health warnings if any
@@ -624,15 +650,17 @@ class ReportGenerator:
             warning_panel = Panel(warning_text, title="Warnings", border_style="status.warning")
             self.console.print(warning_panel)
 
-    def _display_sessions_summary_table(self, sessions: List[SessionData], summary: Dict[str, Any]):
+    def _display_sessions_summary_table(self, sessions: List[SessionData], summary: Dict[str, Any],
+                                      force_recalculate: bool = False):
         """Display sessions summary as table."""
-        table = self.table_formatter.create_sessions_table(sessions, self.analyzer.pricing_data)
+        table = self.table_formatter.create_sessions_table(sessions, self.analyzer.pricing_data, force_recalculate)
         self.console.print(table)
 
-        summary_panel = self.table_formatter.create_summary_panel(sessions, self.analyzer.pricing_data)
+        summary_panel = self.table_formatter.create_summary_panel(sessions, self.analyzer.pricing_data, force_recalculate)
         self.console.print(summary_panel)
 
-    def _display_workflow_sessions_table(self, sessions: List[SessionData], summary: Dict[str, Any]):
+    def _display_workflow_sessions_table(self, sessions: List[SessionData], summary: Dict[str, Any],
+                                        force_recalculate: bool = False):
         """Display sessions grouped by workflow using semantic theme tags."""
         from rich.table import Table
 
@@ -658,7 +686,7 @@ class ReportGenerator:
 
         # Display oldest first so most recent is at the bottom (matching --no-group behavior)
         for workflow in reversed(workflows):
-            workflow_cost = workflow.calculate_total_cost(self.analyzer.pricing_data)
+            workflow_cost = workflow.calculate_total_cost(self.analyzer.pricing_data, force_recalculate)
 
             # Workflow header row (if has sub-agents, show as group)
             if workflow.has_sub_agents:
@@ -694,7 +722,7 @@ class ReportGenerator:
 
                 # Main session row
                 main = workflow.main_session
-                main_cost = main.calculate_total_cost(self.analyzer.pricing_data)
+                main_cost = main.calculate_total_cost(self.analyzer.pricing_data, force_recalculate)
                 main_title = main.display_title
                 if len(main_title) > 38:
                     main_title = main_title[:35] + "..."
@@ -724,7 +752,7 @@ class ReportGenerator:
                 for i, sub in enumerate(workflow.sub_agent_sessions):
                     is_last = i == len(workflow.sub_agent_sessions) - 1
                     prefix = "  └─" if is_last else "  ├─"
-                    sub_cost = sub.calculate_total_cost(self.analyzer.pricing_data)
+                    sub_cost = sub.calculate_total_cost(self.analyzer.pricing_data, force_recalculate)
                     sub_title = sub.display_title
                     if len(sub_title) > 38:
                         sub_title = sub_title[:35] + "..."
@@ -752,7 +780,7 @@ class ReportGenerator:
             else:
                 # Single session (no sub-agents)
                 main = workflow.main_session
-                main_cost = main.calculate_total_cost(self.analyzer.pricing_data)
+                main_cost = main.calculate_total_cost(self.analyzer.pricing_data, force_recalculate)
                 title = main.display_title
                 if len(title) > 42:
                     title = title[:39] + "..."
@@ -785,7 +813,7 @@ class ReportGenerator:
         # Summary panel
         total_workflows = len(workflows)
         total_with_subs = sum(1 for w in workflows if w.has_sub_agents)
-        summary_panel = self.table_formatter.create_summary_panel(sessions, self.analyzer.pricing_data)
+        summary_panel = self.table_formatter.create_summary_panel(sessions, self.analyzer.pricing_data, force_recalculate)
         self.console.print(summary_panel)
 
         # Additional workflow info
@@ -794,7 +822,8 @@ class ReportGenerator:
             workflow_info = f"{total_workflows} workflows ({total_with_subs} with sub-agents)"
             self.console.print(Panel(workflow_info, title="Workflow Summary", border_style="table.header"))
 
-    def _display_daily_breakdown_table(self, daily_usage: List[DailyUsage], breakdown: bool = False):
+    def _display_daily_breakdown_table(self, daily_usage: List[DailyUsage], breakdown: bool = False,
+                                    force_recalculate: bool = False):
         """Display daily breakdown as table using semantic theme tags."""
         if breakdown:
             from rich.table import Table
@@ -816,7 +845,7 @@ class ReportGenerator:
             table.add_column("Cost", justify="right", style="table.row.cost")
 
             for day in daily_usage:
-                day_cost = day.calculate_total_cost(self.analyzer.pricing_data)
+                day_cost = day.calculate_total_cost(self.analyzer.pricing_data, force_recalculate)
                 table.add_row(
                     day.date.strftime('%Y-%m-%d'),
                     f"{len(day.sessions)}",
@@ -829,7 +858,7 @@ class ReportGenerator:
                     self._fmt_cost(day_cost)
                 )
 
-                model_breakdown = self._get_model_breakdown_for_sessions(day.sessions)
+                model_breakdown = self._get_model_breakdown_for_sessions(day.sessions, force_recalculate)
                 for model_data in model_breakdown:
                     table.add_row(
                         f"  ↳ {model_data['model']}",
@@ -846,10 +875,11 @@ class ReportGenerator:
             
             self.console.print(table)
         else:
-            table = self.table_formatter.create_daily_table(daily_usage, self.analyzer.pricing_data)
+            table = self.table_formatter.create_daily_table(daily_usage, self.analyzer.pricing_data, force_recalculate)
             self.console.print(table)
 
-    def _display_weekly_breakdown_table(self, weekly_usage: List[WeeklyUsage], breakdown: bool = False, week_start_day: int = 0):
+    def _display_weekly_breakdown_table(self, weekly_usage: List[WeeklyUsage], breakdown: bool = False, week_start_day: int = 0,
+                                   force_recalculate: bool = False):
         """Display weekly breakdown as table using semantic theme tags."""
         from rich.table import Table
         from ..utils.time_utils import TimeUtils, WEEKDAY_NAMES
@@ -874,7 +904,7 @@ class ReportGenerator:
         table.add_column("Cost", justify="right", style="table.row.cost")
 
         for week in weekly_usage:
-            week_cost = week.calculate_total_cost(self.analyzer.pricing_data)
+            week_cost = week.calculate_total_cost(self.analyzer.pricing_data, force_recalculate)
             week_label = f"{week.year}-W{week.week:02d}"
             date_range = TimeUtils.format_week_range(week.start_date, week.end_date)
             
@@ -892,7 +922,7 @@ class ReportGenerator:
                 for day in week.daily_usage:
                     week_sessions.extend(day.sessions)
                 
-                model_breakdown = self._get_model_breakdown_for_sessions(week_sessions)
+                model_breakdown = self._get_model_breakdown_for_sessions(week_sessions, force_recalculate)
                 for model_data in model_breakdown:
                     table.add_row(
                         "",
@@ -906,7 +936,8 @@ class ReportGenerator:
 
         self.console.print(table)
 
-    def _display_monthly_breakdown_table(self, monthly_usage: List[MonthlyUsage], breakdown: bool = False):
+    def _display_monthly_breakdown_table(self, monthly_usage: List[MonthlyUsage], breakdown: bool = False,
+                                   force_recalculate: bool = False):
         """Display monthly breakdown as table using semantic theme tags."""
         from rich.table import Table
         table = Table(
@@ -923,7 +954,7 @@ class ReportGenerator:
         table.add_column("Cost", justify="right", style="table.row.cost")
 
         for month in monthly_usage:
-            month_cost = month.calculate_total_cost(self.analyzer.pricing_data)
+            month_cost = month.calculate_total_cost(self.analyzer.pricing_data, force_recalculate)
             table.add_row(
                 f"{month.year}-{month.month:02d}",
                 f"{month.total_sessions}",
@@ -938,7 +969,7 @@ class ReportGenerator:
                     for day in week.daily_usage:
                         month_sessions.extend(day.sessions)
                 
-                model_breakdown = self._get_model_breakdown_for_sessions(month_sessions)
+                model_breakdown = self._get_model_breakdown_for_sessions(month_sessions, force_recalculate)
                 for model_data in model_breakdown:
                     table.add_row(
                         f"  ↳ {model_data['model']}",
@@ -1004,7 +1035,8 @@ class ReportGenerator:
     
     # ... Rest of formatting methods (JSON, CSV) remain unchanged ...
     
-    def _format_single_session_json(self, session: SessionData, stats: Dict[str, Any], health: Dict[str, Any]) -> Dict[str, Any]:
+    def _format_single_session_json(self, session: SessionData, stats: Dict[str, Any], health: Dict[str, Any],
+                                force_recalculate: bool = False) -> Dict[str, Any]:
         """Format single session data as JSON."""
         return {
             'session_id': session.session_id,
@@ -1017,18 +1049,20 @@ class ReportGenerator:
                 'models_used': stats['models_used']
             },
             'health': health,
+            'recalculated': force_recalculate,
             'interactions': [
                 {
                     'file_name': file.file_name,
                     'model_id': file.model_id,
                     'tokens': file.tokens.model_dump(),
-                    'cost': float(file.calculate_cost(self.analyzer.pricing_data))
+                    'cost': float(file.calculate_cost(self.analyzer.pricing_data, force_recalculate))
                 }
                 for file in session.files
             ]
         }
 
-    def _format_sessions_summary_json(self, sessions: List[SessionData], summary: Dict[str, Any]) -> Dict[str, Any]:
+    def _format_sessions_summary_json(self, sessions: List[SessionData], summary: Dict[str, Any],
+                                force_recalculate: bool = False) -> Dict[str, Any]:
         """Format sessions summary as JSON."""
         return {
             'summary': {
@@ -1039,6 +1073,7 @@ class ReportGenerator:
                 'models_used': summary['models_used'],
                 'date_range': summary['date_range']
             },
+            'recalculated': force_recalculate,
             'sessions': [
                 {
                     'session_id': session.session_id,
@@ -1046,7 +1081,7 @@ class ReportGenerator:
                     'project_name': session.project_name,
                     'interaction_count': session.interaction_count,
                     'total_tokens': session.total_tokens.model_dump(),
-                    'total_cost': float(session.calculate_total_cost(self.analyzer.pricing_data)),
+                    'total_cost': float(session.calculate_total_cost(self.analyzer.pricing_data, force_recalculate)),
                     'models_used': session.models_used,
                     'start_time': session.start_time.isoformat() if session.start_time else None,
                     'end_time': session.end_time.isoformat() if session.end_time else None
@@ -1055,7 +1090,7 @@ class ReportGenerator:
             ]
         }
 
-    def _format_daily_breakdown_json(self, daily_usage: List[DailyUsage]) -> Dict[str, Any]:
+    def _format_daily_breakdown_json(self, daily_usage: List[DailyUsage], force_recalculate: bool = False) -> Dict[str, Any]:
         """Format daily breakdown as JSON."""
         return {
             'daily_breakdown': [
@@ -1064,14 +1099,15 @@ class ReportGenerator:
                     'sessions': len(day.sessions),
                     'interactions': day.total_interactions,
                     'tokens': day.total_tokens.model_dump(),
-                    'cost': float(day.calculate_total_cost(self.analyzer.pricing_data)),
+                    'cost': float(day.calculate_total_cost(self.analyzer.pricing_data, force_recalculate)),
                     'models_used': day.models_used
                 }
                 for day in daily_usage
-            ]
+            ],
+            'recalculated': force_recalculate
         }
 
-    def _format_weekly_breakdown_json(self, weekly_usage: List[WeeklyUsage]) -> Dict[str, Any]:
+    def _format_weekly_breakdown_json(self, weekly_usage: List[WeeklyUsage], force_recalculate: bool = False) -> Dict[str, Any]:
         """Format weekly breakdown as JSON."""
         return {
             'weekly_breakdown': [
@@ -1083,13 +1119,14 @@ class ReportGenerator:
                     'sessions': week.total_sessions,
                     'interactions': week.total_interactions,
                     'tokens': week.total_tokens.model_dump(),
-                    'cost': float(week.calculate_total_cost(self.analyzer.pricing_data))
+                    'cost': float(week.calculate_total_cost(self.analyzer.pricing_data, force_recalculate))
                 }
                 for week in weekly_usage
-            ]
+            ],
+            'recalculated': force_recalculate
         }
 
-    def _format_monthly_breakdown_json(self, monthly_usage: List[MonthlyUsage]) -> Dict[str, Any]:
+    def _format_monthly_breakdown_json(self, monthly_usage: List[MonthlyUsage], force_recalculate: bool = False) -> Dict[str, Any]:
         """Format monthly breakdown as JSON."""
         return {
             'monthly_breakdown': [
@@ -1099,13 +1136,15 @@ class ReportGenerator:
                     'sessions': month.total_sessions,
                     'interactions': month.total_interactions,
                     'tokens': month.total_tokens.model_dump(),
-                    'cost': float(month.calculate_total_cost(self.analyzer.pricing_data))
+                    'cost': float(month.calculate_total_cost(self.analyzer.pricing_data, force_recalculate))
                 }
                 for month in monthly_usage
-            ]
+            ],
+            'recalculated': force_recalculate
         }
 
-    def _format_models_breakdown_json(self, model_breakdown: ModelBreakdownReport) -> Dict[str, Any]:
+    def _format_models_breakdown_json(self, model_breakdown: ModelBreakdownReport,
+                                force_recalculate: bool = False) -> Dict[str, Any]:
         """Format models breakdown as JSON."""
         return {
             'timeframe': model_breakdown.timeframe,
@@ -1113,6 +1152,7 @@ class ReportGenerator:
             'end_date': model_breakdown.end_date.isoformat() if model_breakdown.end_date else None,
             'total_cost': float(model_breakdown.total_cost),
             'total_tokens': model_breakdown.total_tokens.model_dump(),
+            'recalculated': force_recalculate,
             'models': [
                 {
                     'model_name': model.model_name,
@@ -1128,7 +1168,8 @@ class ReportGenerator:
             ]
         }
 
-    def _format_single_session_csv(self, session: SessionData, stats: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _format_single_session_csv(self, session: SessionData, stats: Dict[str, Any],
+                             force_recalculate: bool = False) -> List[Dict[str, Any]]:
         """Format single session data for CSV export."""
         return [
             {
@@ -1142,17 +1183,18 @@ class ReportGenerator:
                 'cache_write_tokens': file.tokens.cache_write,
                 'cache_read_tokens': file.tokens.cache_read,
                 'total_tokens': file.tokens.total,
-                'cost': float(file.calculate_cost(self.analyzer.pricing_data)),
+                'cost': float(file.calculate_cost(self.analyzer.pricing_data, force_recalculate)),
                 'duration_ms': file.time_data.duration_ms if file.time_data else None
             }
             for file in session.files
         ]
 
-    def _format_sessions_summary_csv(self, sessions: List[SessionData]) -> List[Dict[str, Any]]:
+    def _format_sessions_summary_csv(self, sessions: List[SessionData],
+                             force_recalculate: bool = False) -> List[Dict[str, Any]]:
         """Format sessions summary for CSV export."""
         rows = []
         for session in sessions:
-            model_breakdown = session.get_model_breakdown(self.analyzer.pricing_data)
+            model_breakdown = session.get_model_breakdown(self.analyzer.pricing_data, force_recalculate)
             for model, stats in model_breakdown.items():
                 rows.append({
                     'session_id': session.session_id,
@@ -1171,7 +1213,7 @@ class ReportGenerator:
                 })
         return rows
 
-    def _format_daily_breakdown_csv(self, daily_usage: List[DailyUsage]) -> List[Dict[str, Any]]:
+    def _format_daily_breakdown_csv(self, daily_usage: List[DailyUsage], force_recalculate: bool = False) -> List[Dict[str, Any]]:
         """Format daily breakdown for CSV export."""
         return [
             {
@@ -1183,13 +1225,13 @@ class ReportGenerator:
                 'cache_write_tokens': day.total_tokens.cache_write,
                 'cache_read_tokens': day.total_tokens.cache_read,
                 'total_tokens': day.total_tokens.total,
-                'cost': float(day.calculate_total_cost(self.analyzer.pricing_data)),
+                'cost': float(day.calculate_total_cost(self.analyzer.pricing_data, force_recalculate)),
                 'models_used': ', '.join(day.models_used)
             }
             for day in daily_usage
         ]
 
-    def _format_weekly_breakdown_csv(self, weekly_usage: List[WeeklyUsage]) -> List[Dict[str, Any]]:
+    def _format_weekly_breakdown_csv(self, weekly_usage: List[WeeklyUsage], force_recalculate: bool = False) -> List[Dict[str, Any]]:
         """Format weekly breakdown for CSV export."""
         return [
             {
@@ -1204,12 +1246,12 @@ class ReportGenerator:
                 'cache_write_tokens': week.total_tokens.cache_write,
                 'cache_read_tokens': week.total_tokens.cache_read,
                 'total_tokens': week.total_tokens.total,
-                'cost': float(week.calculate_total_cost(self.analyzer.pricing_data))
+                'cost': float(week.calculate_total_cost(self.analyzer.pricing_data, force_recalculate))
             }
             for week in weekly_usage
         ]
 
-    def _format_monthly_breakdown_csv(self, monthly_usage: List[MonthlyUsage]) -> List[Dict[str, Any]]:
+    def _format_monthly_breakdown_csv(self, monthly_usage: List[MonthlyUsage], force_recalculate: bool = False) -> List[Dict[str, Any]]:
         """Format monthly breakdown for CSV export."""
         return [
             {
@@ -1222,12 +1264,13 @@ class ReportGenerator:
                 'cache_write_tokens': month.total_tokens.cache_write,
                 'cache_read_tokens': month.total_tokens.cache_read,
                 'total_tokens': month.total_tokens.total,
-                'cost': float(month.calculate_total_cost(self.analyzer.pricing_data))
+                'cost': float(month.calculate_total_cost(self.analyzer.pricing_data, force_recalculate))
             }
             for month in monthly_usage
         ]
 
-    def _format_models_breakdown_csv(self, model_breakdown: ModelBreakdownReport) -> List[Dict[str, Any]]:
+    def _format_models_breakdown_csv(self, model_breakdown: ModelBreakdownReport,
+                             force_recalculate: bool = False) -> List[Dict[str, Any]]:
         """Format models breakdown for CSV export."""
         return [
             {
@@ -1242,12 +1285,14 @@ class ReportGenerator:
                 'cost': float(model.total_cost),
                 'p50_output_rate': model.p50_output_rate,
                 'first_used': model.first_used.isoformat() if model.first_used else None,
-                'last_used': model.last_used.isoformat() if model.last_used else None
+                'last_used': model.last_used.isoformat() if model.last_used else None,
+                'recalculated': force_recalculate
             }
             for model in model_breakdown.model_stats
         ]
 
-    def _format_projects_breakdown_json(self, project_breakdown: ProjectBreakdownReport) -> Dict[str, Any]:
+    def _format_projects_breakdown_json(self, project_breakdown: ProjectBreakdownReport,
+                               force_recalculate: bool = False) -> Dict[str, Any]:
         """Format projects breakdown as JSON."""
         return {
             'timeframe': project_breakdown.timeframe,
@@ -1255,6 +1300,7 @@ class ReportGenerator:
             'end_date': project_breakdown.end_date.isoformat() if project_breakdown.end_date else None,
             'total_cost': float(project_breakdown.total_cost),
             'total_tokens': project_breakdown.total_tokens.model_dump(),
+            'recalculated': force_recalculate,
             'projects': [
                 {
                     'project_name': project.project_name,
@@ -1270,7 +1316,8 @@ class ReportGenerator:
             ]
         }
 
-    def _format_projects_breakdown_csv(self, project_breakdown: ProjectBreakdownReport) -> List[Dict[str, Any]]:
+    def _format_projects_breakdown_csv(self, project_breakdown: ProjectBreakdownReport,
+                              force_recalculate: bool = False) -> List[Dict[str, Any]]:
         """Format projects breakdown for CSV export."""
         return [
             {
@@ -1285,7 +1332,8 @@ class ReportGenerator:
                 'cost': float(project.total_cost),
                 'models_used': ', '.join(project.models_used),
                 'first_activity': project.first_activity.isoformat() if project.first_activity else None,
-                'last_activity': project.last_activity.isoformat() if project.last_activity else None
+                'last_activity': project.last_activity.isoformat() if project.last_activity else None,
+                'recalculated': force_recalculate
             }
             for project in project_breakdown.project_stats
         ]

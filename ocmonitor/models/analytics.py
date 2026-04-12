@@ -43,9 +43,14 @@ class DailyUsage(BaseModel):
             models.update(session.models_used)
         return list(models)
 
-    def calculate_total_cost(self, pricing_data: Dict[str, Any]) -> Decimal:
-        """Calculate total cost for the day."""
-        return sum((session.calculate_total_cost(pricing_data) for session in self.sessions), Decimal('0.0'))
+    def calculate_total_cost(self, pricing_data: Dict[str, Any], force_recalculate: bool = False) -> Decimal:
+        """Calculate total cost for the day.
+
+        Args:
+            pricing_data: Dictionary of model pricing information
+            force_recalculate: If True, ignore stored costs and recalculate from pricing data
+        """
+        return sum((session.calculate_total_cost(pricing_data, force_recalculate) for session in self.sessions), Decimal('0.0'))
 
 
 class WeeklyUsage(BaseModel):
@@ -81,9 +86,14 @@ class WeeklyUsage(BaseModel):
         """Calculate total interactions for the week."""
         return sum(day.total_interactions for day in self.daily_usage)
 
-    def calculate_total_cost(self, pricing_data: Dict[str, Any]) -> Decimal:
-        """Calculate total cost for the week."""
-        return sum((day.calculate_total_cost(pricing_data) for day in self.daily_usage), Decimal('0.0'))
+    def calculate_total_cost(self, pricing_data: Dict[str, Any], force_recalculate: bool = False) -> Decimal:
+        """Calculate total cost for the week.
+
+        Args:
+            pricing_data: Dictionary of model pricing information
+            force_recalculate: If True, ignore stored costs and recalculate from pricing data
+        """
+        return sum((day.calculate_total_cost(pricing_data, force_recalculate) for day in self.daily_usage), Decimal('0.0'))
 
 
 class MonthlyUsage(BaseModel):
@@ -117,9 +127,14 @@ class MonthlyUsage(BaseModel):
         """Calculate total interactions for the month."""
         return sum(week.total_interactions for week in self.weekly_usage)
 
-    def calculate_total_cost(self, pricing_data: Dict[str, Any]) -> Decimal:
-        """Calculate total cost for the month."""
-        return sum((week.calculate_total_cost(pricing_data) for week in self.weekly_usage), Decimal('0.0'))
+    def calculate_total_cost(self, pricing_data: Dict[str, Any], force_recalculate: bool = False) -> Decimal:
+        """Calculate total cost for the month.
+
+        Args:
+            pricing_data: Dictionary of model pricing information
+            force_recalculate: If True, ignore stored costs and recalculate from pricing data
+        """
+        return sum((week.calculate_total_cost(pricing_data, force_recalculate) for week in self.weekly_usage), Decimal('0.0'))
 
 
 class ModelUsageStats(BaseModel):
@@ -312,7 +327,8 @@ class TimeframeAnalyzer:
         pricing_data: Dict[str, Any],
         timeframe: str = "all",
         start_date: Optional[date] = None,
-        end_date: Optional[date] = None
+        end_date: Optional[date] = None,
+        force_recalculate: bool = False,
     ) -> ModelBreakdownReport:
         """Create model usage breakdown."""
         # Filter sessions by date range if specified
@@ -356,7 +372,7 @@ class TimeframeAnalyzer:
                     model_stats.tokens.cache_write += file.tokens.cache_write
                     model_stats.tokens.cache_read += file.tokens.cache_read
                     model_stats.interactions += 1
-                    model_stats.cost += file.calculate_cost(pricing_data)
+                    model_stats.cost += file.calculate_cost(pricing_data, force_recalculate)
                     # Track processing duration
                     if file.time_data and file.time_data.duration_ms:
                         model_stats.duration_ms += file.time_data.duration_ms
@@ -408,7 +424,8 @@ class TimeframeAnalyzer:
         pricing_data: Dict[str, Any],
         timeframe: str = "all",
         start_date: Optional[date] = None,
-        end_date: Optional[date] = None
+        end_date: Optional[date] = None,
+        force_recalculate: bool = False,
     ) -> 'ProjectBreakdownReport':
         """Create project usage breakdown."""
         # Filter sessions by date range if specified
@@ -450,7 +467,7 @@ class TimeframeAnalyzer:
             
             project_stats.sessions += 1
             project_stats.interactions += session.interaction_count
-            project_stats.cost += session.calculate_total_cost(pricing_data)
+            project_stats.cost += session.calculate_total_cost(pricing_data, force_recalculate)
             project_stats.models_used.update(session.models_used)
             
             # Track first/last activity times
