@@ -314,6 +314,8 @@ class TableFormatter:
         table.add_column("Interactions", justify="right", style="status.success")
         table.add_column("Input Tokens", justify="right", style="table.row.tokens")
         table.add_column("Output Tokens", justify="right", style="table.row.tokens")
+        table.add_column("Cache Write", justify="right", style="table.row.tokens")
+        table.add_column("Cache Read", justify="right", style="table.row.tokens")
         table.add_column("Total Tokens", justify="right", style="table.row.tokens")
         table.add_column("Cost", justify="right", style="table.row.cost")
         table.add_column("Cost %", justify="right", style="table.row.cost")
@@ -338,6 +340,8 @@ class TableFormatter:
                 self.format_number(model.total_interactions),
                 self.format_number(model.total_tokens.input),
                 self.format_number(model.total_tokens.output),
+                self.format_number(model.total_tokens.cache_write),
+                self.format_number(model.total_tokens.cache_read),
                 self.format_number(model.total_tokens.total),
                 Text(self.format_currency(model.total_cost), style=cost_color),
                 Text(cost_percentage, style=cost_color),
