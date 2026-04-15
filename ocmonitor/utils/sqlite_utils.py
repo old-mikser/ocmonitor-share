@@ -7,7 +7,7 @@ import time
 from decimal import Decimal
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Generator
-from datetime import datetime
+from datetime import datetime, date, timezone
 
 from ..models.session import SessionData, InteractionFile, TokenUsage, TimeData
 from ..models.tool_usage import ToolUsageStats, ToolUsageSummary, ModelToolUsage
@@ -246,13 +246,16 @@ class SQLiteProcessor:
 
     @classmethod
     def load_all_sessions(
-        cls, db_path: Optional[Path] = None, limit: Optional[int] = None
+        cls, db_path: Optional[Path] = None, limit: Optional[int] = None,
+        start_date: Optional[date] = None, end_date: Optional[date] = None
     ) -> List[SessionData]:
         """Load all sessions from the SQLite database.
 
         Args:
             db_path: Path to database (uses default if not provided)
             limit: Maximum number of sessions to load (None for all)
+            start_date: Optional start date to filter sessions (inclusive)
+            end_date: Optional end date to filter sessions (inclusive)
 
         Returns:
             List of SessionData objects sorted by creation time (newest first)
@@ -265,18 +268,42 @@ class SQLiteProcessor:
 
         conn = cls._get_connection(db_path)
         try:
+            # Build WHERE clause for date filtering
+            where_clause = ''
+            params: List[Any] = []
+
+            if start_date is not None and end_date is not None:
+                start_dt = datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
+                end_dt = datetime.combine(end_date, datetime.max.time(), tzinfo=timezone.utc)
+                start_ms = int(start_dt.timestamp() * 1000)
+                end_ms = int(end_dt.timestamp() * 1000)
+                where_clause = 'WHERE s.time_created BETWEEN ? AND ?'
+                params = [start_ms, end_ms]
+            elif start_date is not None:
+                start_dt = datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc)
+                start_ms = int(start_dt.timestamp() * 1000)
+                where_clause = 'WHERE s.time_created >= ?'
+                params = [start_ms]
+            elif end_date is not None:
+                end_dt = datetime.combine(end_date, datetime.max.time(), tzinfo=timezone.utc)
+                end_ms = int(end_dt.timestamp() * 1000)
+                where_clause = 'WHERE s.time_created <= ?'
+                params = [end_ms]
+
             # Query all sessions with project info
             query = """
                 SELECT s.*, p.worktree as project_path, p.name as project_name
                 FROM session s
                 LEFT JOIN project p ON s.project_id = p.id
+                %s
                 ORDER BY s.time_created DESC
-            """
+            """ % where_clause
 
             if limit:
-                query += f" LIMIT {limit}"
+                query += " LIMIT ?"
+                params = params + [limit]
 
-            cursor = conn.execute(query)
+            cursor = conn.execute(query, params)
             sessions = []
 
             for row in cursor:

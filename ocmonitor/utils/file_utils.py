@@ -5,9 +5,10 @@ import os
 import re
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Generator
-from datetime import datetime
+from datetime import datetime, date, timezone
 
 from ..models.session import SessionData, InteractionFile, TokenUsage, TimeData
+from .time_utils import TimeUtils
 
 
 class FileProcessor:
@@ -347,17 +348,31 @@ class FileProcessor:
         return FileProcessor.parse_interaction_file(json_files[0], session_id)
 
     @staticmethod
-    def load_all_sessions(base_path: str, limit: Optional[int] = None) -> List[SessionData]:
+    def load_all_sessions(base_path: str, limit: Optional[int] = None,
+        start_date: Optional[date] = None, end_date: Optional[date] = None
+    ) -> List[SessionData]:
         """Load all sessions from the base path.
 
         Args:
             base_path: Path to search for sessions
             limit: Maximum number of sessions to load (None for all)
+            start_date: Optional start date to filter sessions (inclusive)
+            end_date: Optional end date to filter sessions (inclusive)
 
         Returns:
             List of SessionData objects
         """
         session_dirs = FileProcessor.find_session_directories(base_path)
+
+        # Pre-filter by directory mtime if date range provided
+        if start_date or end_date:
+            start_dt = datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc) if start_date else None
+            end_dt = datetime.combine(end_date, datetime.max.time(), tzinfo=timezone.utc) if end_date else None
+            start_ts = start_dt.timestamp() if start_dt else 0
+            end_ts = end_dt.timestamp() if end_dt else float('inf')
+            session_dirs = [
+                d for d in session_dirs if start_ts <= d.stat().st_mtime <= end_ts
+            ]
 
         if limit:
             session_dirs = session_dirs[:limit]
@@ -366,6 +381,13 @@ class FileProcessor:
         for session_dir in session_dirs:
             session_data = FileProcessor.load_session_data(session_dir)
             if session_data:
+                # Secondary filter by actual session start_time
+                # Sessions without start_time are included (conservative approach)
+                if start_date or end_date:
+                    if session_data.start_time:
+                        session_date = session_data.start_time.date()
+                        if not TimeUtils.date_in_range(session_date, start_date, end_date):
+                            continue
                 sessions.append(session_data)
 
         return sessions

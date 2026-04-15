@@ -48,7 +48,9 @@ class SessionAnalyzer:
         """
         return self._data_loader.load_session_hierarchy()
 
-    def analyze_all_sessions(self, base_path: Optional[str] = None, limit: Optional[int] = None) -> List[SessionData]:
+    def analyze_all_sessions(self, base_path: Optional[str] = None, limit: Optional[int] = None,
+        start_date: Optional[date] = None, end_date: Optional[date] = None
+    ) -> List[SessionData]:
         """Analyze all sessions from the preferred data source.
         
         Uses the DataLoader which prefers SQLite but falls back to files.
@@ -56,11 +58,13 @@ class SessionAnalyzer:
         Args:
             base_path: Optional path override (used only for file-based loading)
             limit: Maximum number of sessions to analyze
+            start_date: Optional start date to filter sessions (inclusive)
+            end_date: Optional end date to filter sessions (inclusive)
             
         Returns:
             List of SessionData objects
         """
-        return self._data_loader.load_all_sessions(limit)
+        return self._data_loader.load_all_sessions(limit, start_date=start_date, end_date=end_date)
 
     def get_data_source_info(self) -> Dict[str, Any]:
         """Get information about the current data source.

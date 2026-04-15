@@ -2,7 +2,7 @@
 
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Generator, Literal
-from datetime import datetime
+from datetime import datetime, date
 
 from ..models.session import SessionData
 from ..models.analytics import ModelDetailStats
@@ -135,11 +135,15 @@ class DataLoader:
                 "or file storage at ~/.local/share/opencode/storage/message/"
             )
     
-    def load_all_sessions(self, limit: Optional[int] = None) -> List[SessionData]:
+    def load_all_sessions(self, limit: Optional[int] = None,
+        start_date: Optional[date] = None, end_date: Optional[date] = None
+    ) -> List[SessionData]:
         """Load all sessions from the preferred data source.
         
         Args:
             limit: Maximum number of sessions to load (None for all)
+            start_date: Optional start date to filter sessions (inclusive)
+            end_date: Optional end date to filter sessions (inclusive)
             
         Returns:
             List of SessionData objects
@@ -151,10 +155,14 @@ class DataLoader:
         self._last_source = source
         
         if source == "sqlite":
-            sessions = SQLiteProcessor.load_all_sessions(self._resolved_db_path, limit)
+            sessions = SQLiteProcessor.load_all_sessions(
+                self._resolved_db_path, limit,
+                start_date=start_date, end_date=end_date
+            )
         else:
             sessions = FileProcessor.load_all_sessions(
-                str(self._resolved_files_path), limit
+                str(self._resolved_files_path), limit,
+                start_date=start_date, end_date=end_date
             )
             # Tag sessions as coming from files
             for session in sessions:
