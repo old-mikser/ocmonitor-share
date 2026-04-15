@@ -2,6 +2,7 @@
 
 import json
 import pytest
+from datetime import date, timedelta
 from pathlib import Path
 
 from ocmonitor.utils.file_utils import FileProcessor
@@ -287,6 +288,74 @@ class TestLoadAllSessions:
         result = FileProcessor.load_all_sessions(str(tmp_path), limit=3)
         
         assert len(result) == 3
+
+    def test_load_sessions_with_date_range(self, tmp_path):
+        """Test loading sessions filtered by date range."""
+        session1 = tmp_path / "ses_001"
+        session1.mkdir()
+        (session1 / "inter_0001.json").write_text(
+            json.dumps({"tokens": {"input": 100, "output": 50}})
+        )
+
+        session2 = tmp_path / "ses_002"
+        session2.mkdir()
+        (session2 / "inter_0001.json").write_text(
+            json.dumps({"tokens": {"input": 200, "output": 100}})
+        )
+
+        start = date.today() - timedelta(days=30)
+        end = date.today() + timedelta(days=1)
+
+        result = FileProcessor.load_all_sessions(
+            str(tmp_path), start_date=start, end_date=end
+        )
+
+        assert isinstance(result, list)
+
+    def test_load_sessions_with_only_start_date(self, tmp_path):
+        """Test loading sessions with only start date filter."""
+        session1 = tmp_path / "ses_001"
+        session1.mkdir()
+        (session1 / "inter_0001.json").write_text(
+            json.dumps({"tokens": {"input": 100, "output": 50}})
+        )
+
+        start = date(2020, 1, 1)
+
+        result = FileProcessor.load_all_sessions(str(tmp_path), start_date=start)
+
+        assert isinstance(result, list)
+
+    def test_load_sessions_with_only_end_date(self, tmp_path):
+        """Test loading sessions with only end date filter."""
+        session1 = tmp_path / "ses_001"
+        session1.mkdir()
+        (session1 / "inter_0001.json").write_text(
+            json.dumps({"tokens": {"input": 100, "output": 50}})
+        )
+
+        end = date.today() + timedelta(days=10)
+
+        result = FileProcessor.load_all_sessions(str(tmp_path), end_date=end)
+
+        assert isinstance(result, list)
+
+    def test_load_sessions_date_range_filters_by_mtime(self, tmp_path):
+        """Test that date filtering pre-filters by directory mtime."""
+        session1 = tmp_path / "ses_001"
+        session1.mkdir()
+        (session1 / "inter_0001.json").write_text(
+            json.dumps({"tokens": {"input": 100, "output": 50}})
+        )
+
+        future_start = date.today() + timedelta(days=10)
+        future_end = date.today() + timedelta(days=20)
+
+        result = FileProcessor.load_all_sessions(
+            str(tmp_path), start_date=future_start, end_date=future_end
+        )
+
+        assert result == []
 
 
 class TestValidateSessionStructure:

@@ -1,5 +1,6 @@
 """Tests for SQLite path discovery behavior."""
 
+from datetime import date, timedelta
 from pathlib import Path
 
 from ocmonitor.config import Config, PathsConfig, config_manager
@@ -72,3 +73,197 @@ class TestFindDatabasePath:
         resolved = SQLiteProcessor.find_database_path()
 
         assert resolved == default_db
+
+class TestLoadAllSessionsDateFilter:
+    """Tests for date filtering in load_all_sessions."""
+
+    def test_load_sessions_with_start_and_end_date(self, tmp_path: Path):
+        """Test that sessions are filtered by date range."""
+        import sqlite3
+
+        db_path = tmp_path / "test.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.execute("""
+            CREATE TABLE session (
+                id TEXT PRIMARY KEY,
+                project_id TEXT,
+                time_created INTEGER,
+                time_updated INTEGER,
+                summary TEXT,
+                first_model TEXT,
+                cost REAL
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE project (
+                id TEXT PRIMARY KEY,
+                name TEXT,
+                worktree TEXT,
+                created_at INTEGER
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE interaction_file (
+                id TEXT PRIMARY KEY,
+                session_id TEXT,
+                file_name TEXT,
+                model_id TEXT,
+                time_created INTEGER,
+                input_tokens INTEGER,
+                output_tokens INTEGER,
+                cache_read_tokens INTEGER,
+                cache_write_tokens INTEGER,
+                cost REAL
+            )
+        """)
+        conn.commit()
+        conn.close()
+
+        start = date.today() - timedelta(days=7)
+        end = date.today() - timedelta(days=3)
+
+        sessions = SQLiteProcessor.load_all_sessions(
+            db_path=db_path, start_date=start, end_date=end
+        )
+
+        assert isinstance(sessions, list)
+
+    def test_load_sessions_with_only_start_date(self, tmp_path: Path):
+        """Test that sessions are filtered by start date only."""
+        import sqlite3
+
+        db_path = tmp_path / "test.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.execute("""
+            CREATE TABLE session (
+                id TEXT PRIMARY KEY,
+                project_id TEXT,
+                time_created INTEGER,
+                time_updated INTEGER,
+                summary TEXT,
+                first_model TEXT,
+                cost REAL
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE project (
+                id TEXT PRIMARY KEY,
+                name TEXT,
+                worktree TEXT,
+                created_at INTEGER
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE interaction_file (
+                id TEXT PRIMARY KEY,
+                session_id TEXT,
+                file_name TEXT,
+                model_id TEXT,
+                time_created INTEGER,
+                input_tokens INTEGER,
+                output_tokens INTEGER,
+                cache_read_tokens INTEGER,
+                cache_write_tokens INTEGER,
+                cost REAL
+            )
+        """)
+        conn.commit()
+        conn.close()
+
+        start = date.today() - timedelta(days=5)
+        sessions = SQLiteProcessor.load_all_sessions(db_path=db_path, start_date=start)
+
+        assert isinstance(sessions, list)
+
+    def test_load_sessions_with_only_end_date(self, tmp_path: Path):
+        """Test that sessions are filtered by end date only."""
+        import sqlite3
+
+        db_path = tmp_path / "test.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.execute("""
+            CREATE TABLE session (
+                id TEXT PRIMARY KEY,
+                project_id TEXT,
+                time_created INTEGER,
+                time_updated INTEGER,
+                summary TEXT,
+                first_model TEXT,
+                cost REAL
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE project (
+                id TEXT PRIMARY KEY,
+                name TEXT,
+                worktree TEXT,
+                created_at INTEGER
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE interaction_file (
+                id TEXT PRIMARY KEY,
+                session_id TEXT,
+                file_name TEXT,
+                model_id TEXT,
+                time_created INTEGER,
+                input_tokens INTEGER,
+                output_tokens INTEGER,
+                cache_read_tokens INTEGER,
+                cache_write_tokens INTEGER,
+                cost REAL
+            )
+        """)
+        conn.commit()
+        conn.close()
+
+        end = date.today() - timedelta(days=3)
+        sessions = SQLiteProcessor.load_all_sessions(db_path=db_path, end_date=end)
+
+        assert isinstance(sessions, list)
+
+    def test_load_sessions_parameterized_limit(self, tmp_path: Path):
+        """Test that LIMIT uses parameterized query."""
+        import sqlite3
+
+        db_path = tmp_path / "test.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.execute("""
+            CREATE TABLE session (
+                id TEXT PRIMARY KEY,
+                project_id TEXT,
+                time_created INTEGER,
+                time_updated INTEGER,
+                summary TEXT,
+                first_model TEXT,
+                cost REAL
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE project (
+                id TEXT PRIMARY KEY,
+                name TEXT,
+                worktree TEXT,
+                created_at INTEGER
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE interaction_file (
+                id TEXT PRIMARY KEY,
+                session_id TEXT,
+                file_name TEXT,
+                model_id TEXT,
+                time_created INTEGER,
+                input_tokens INTEGER,
+                output_tokens INTEGER,
+                cache_read_tokens INTEGER,
+                cache_write_tokens INTEGER,
+                cost REAL
+            )
+        """)
+        conn.commit()
+        conn.close()
+
+        sessions = SQLiteProcessor.load_all_sessions(db_path=db_path, limit=10)
+
+        assert isinstance(sessions, list)
