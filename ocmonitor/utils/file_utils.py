@@ -30,7 +30,8 @@ class FileProcessor:
 
         # Find all directories that start with 'ses_'
         session_dirs = [
-            d for d in base_dir.iterdir() if d.is_dir() and d.name.startswith("ses_")
+            d for d in base_dir.iterdir()
+            if d.is_dir() and d.name.startswith('ses_')
         ]
 
         # Sort by modification time (most recent first)
@@ -65,131 +66,123 @@ class FileProcessor:
             Parsed JSON data or None if failed
         """
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
-        except (
-            json.JSONDecodeError,
-            FileNotFoundError,
-            PermissionError,
-            UnicodeDecodeError,
-        ):
+        except (json.JSONDecodeError, FileNotFoundError, PermissionError, UnicodeDecodeError):
             return None
 
     @staticmethod
     def _extract_model_name(model_id: str) -> str:
         """Extract model name from fully qualified model ID.
-
+        
         Args:
             model_id: Full model ID (e.g., 'qwen/qwen3-coder' or 'claude-sonnet-4-20250514')
-
+            
         Returns:
             Extracted model name (normalized for pricing lookup)
         """
-        if "/" in model_id:
+        if '/' in model_id:
             return model_id.lower()
         return FileProcessor._normalize_model_name(model_id)
 
     @staticmethod
     def _normalize_model_name(model_id: str) -> str:
         """Normalize model name for flexible pricing lookup.
-
+        
         Handles various model ID formats:
         - Strips date suffixes (e.g., -20250514, -20251101)
         - Normalizes version separators (-X-Y to -X.Y)
         - Converts to lowercase
-
+        
         Args:
             model_id: Raw model ID from OpenCode
-
+            
         Returns:
             Normalized model name for pricing lookup
         """
         model_id = model_id.lower()
-
+        
         # Strip date suffixes like -20250514, -20251101, -20241001, etc.
-        model_id = re.sub(r"-\d{8}$", "", model_id)
-
+        model_id = re.sub(r'-\d{8}$', '', model_id)
+        
         # Normalize version separators: -X-Y to -X.Y
         # E.g., claude-opus-4-5 -> claude-opus-4.5
         # Be careful not to create double dots or mess up existing dots
-        model_id = re.sub(r"-(\d+)-(\d+)(?![.\d])", r"-\1.\2", model_id)
-
+        model_id = re.sub(r'-(\d+)-(\d+)(?![.\d])', r'-\1.\2', model_id)
+        
         # Handle special cases for known model families
-
+        
         # Claude family: claude-opus-4-5 -> claude-opus-4.5, claude-sonnet-4-5 -> claude-sonnet-4.5
-        model_id = re.sub(
-            r"claude-(opus|sonnet|haiku)-(\d+)-(\d+)", r"claude-\1-\2.\3", model_id
-        )
-
+        model_id = re.sub(r'claude-(opus|sonnet|haiku)-(\d+)-(\d+)', r'claude-\1-\2.\3', model_id)
+        
         # Gemini family: gemini-3-pro -> gemini-3-pro (keep as is)
         # GPT family: gpt-5-1 -> gpt-5.1, gpt-5-2 -> gpt-5.2
-        model_id = re.sub(r"gpt-(\d+)-(\d+)", r"gpt-\1.\2", model_id)
-
+        model_id = re.sub(r'gpt-(\d+)-(\d+)', r'gpt-\1.\2', model_id)
+        
         # Kimi family: kimi-k-2 -> kimi-k2 (remove middle dash)
-        model_id = re.sub(r"kimi-k-(\d+)", r"kimi-k\1", model_id)
-
+        model_id = re.sub(r'kimi-k-(\d+)', r'kimi-k\1', model_id)
+        
         return model_id
 
     @staticmethod
     def extract_project_name(path_str: str) -> str:
         """Extract project name from a file path.
-
+        
         Args:
             path_str: Full path string (e.g., '/Users/shelli/Documents/apps/ocmonitor')
-
+            
         Returns:
             Project name (last directory in path) or 'Unknown' if empty
         """
         if not path_str:
             return "Unknown"
-
+        
         path = Path(path_str)
         return path.name if path.name else "Unknown"
 
     @staticmethod
     def get_opencode_storage_path() -> Optional[Path]:
         """Get the OpenCode storage path.
-
+        
         Returns:
             Path to OpenCode storage directory or None if not found
         """
         # Try to get from configuration first
         try:
             from ..config import config_manager
-
             storage_path = Path(config_manager.config.paths.opencode_storage_dir)
             if storage_path.exists():
                 return storage_path
         except ImportError:
             pass
-
+        
         # Standard OpenCode storage location as fallback
         home = Path.home()
         storage_path = home / ".local" / "share" / "opencode" / "storage"
-
+        
         if storage_path.exists():
             return storage_path
-
+        
         return None
 
     @staticmethod
     def find_session_title(session_id: str) -> Optional[str]:
         """Find and load session title from OpenCode storage.
-
+        
         Args:
             session_id: Session ID to search for
-
+            
         Returns:
             Session title or None if not found
         """
         storage_path = FileProcessor.get_opencode_storage_path()
         if not storage_path:
             return None
-
+        
         session_storage = storage_path / "session"
         if not session_storage.exists():
             return None
-
+        
         # Search through all project directories (including global)
         for project_dir in session_storage.iterdir():
             if not project_dir.is_dir():
@@ -204,9 +197,7 @@ class FileProcessor:
         return None
 
     @staticmethod
-    def parse_interaction_file(
-        file_path: Path, session_id: str
-    ) -> Optional[InteractionFile]:
+    def parse_interaction_file(file_path: Path, session_id: str) -> Optional[InteractionFile]:
         """Parse a single interaction JSON file.
 
         Args:
@@ -222,43 +213,43 @@ class FileProcessor:
 
         try:
             # Extract basic information
-            model_id = data.get("modelID", "unknown")
-
+            model_id = data.get('modelID', 'unknown')
+            
             # Handle fully qualified model names
             model_id = FileProcessor._extract_model_name(model_id)
 
             # Extract token usage
-            tokens_data = data.get("tokens", {})
-            cache_data = tokens_data.get("cache", {})
+            tokens_data = data.get('tokens', {})
+            cache_data = tokens_data.get('cache', {})
 
             tokens = TokenUsage(
-                input=tokens_data.get("input", 0),
-                output=tokens_data.get("output", 0),
-                cache_write=cache_data.get("write", 0),
-                cache_read=cache_data.get("read", 0),
+                input=tokens_data.get('input', 0),
+                output=tokens_data.get('output', 0),
+                cache_write=cache_data.get('write', 0),
+                cache_read=cache_data.get('read', 0)
             )
 
             # Extract time data
             time_data = None
-            if "time" in data:
-                time_info = data["time"]
+            if 'time' in data:
+                time_info = data['time']
                 time_data = TimeData(
-                    created=time_info.get("created"),
-                    completed=time_info.get("completed"),
+                    created=time_info.get('created'),
+                    completed=time_info.get('completed')
                 )
 
             # Extract project path data
             project_path = None
-            if "path" in data:
-                path_info = data["path"]
+            if 'path' in data:
+                path_info = data['path']
                 # Use 'cwd' as the project path, fallback to 'root' if needed
-                project_path = path_info.get("cwd") or path_info.get("root")
+                project_path = path_info.get('cwd') or path_info.get('root')
 
             # Extract agent type (e.g., 'explore', 'plan', 'build')
-            agent = data.get("agent")
+            agent = data.get('agent')
 
             # Extract finish reason (e.g., 'stop', 'tool-calls')
-            finish_reason = data.get("finish")
+            finish_reason = data.get('finish')
 
             return InteractionFile(
                 file_path=file_path,
@@ -269,7 +260,7 @@ class FileProcessor:
                 project_path=project_path,
                 agent=agent,
                 finish_reason=finish_reason,
-                raw_data=data,
+                raw_data=data
             )
 
         except (KeyError, ValueError, TypeError):
@@ -311,9 +302,7 @@ class FileProcessor:
         # Get agent type from first interaction file (sorted by time)
         sorted_files = sorted(
             interaction_files,
-            key=lambda f: (
-                f.time_data.created if f.time_data and f.time_data.created else 0
-            ),
+            key=lambda f: f.time_data.created if f.time_data and f.time_data.created else 0
         )
         session_agent = sorted_files[0].agent if sorted_files else None
 
@@ -322,7 +311,7 @@ class FileProcessor:
             session_path=session_path,
             files=interaction_files,
             session_title=session_title,
-            agent=session_agent,
+            agent=session_agent
         )
 
     @staticmethod
@@ -359,11 +348,8 @@ class FileProcessor:
         return FileProcessor.parse_interaction_file(json_files[0], session_id)
 
     @staticmethod
-    def load_all_sessions(
-        base_path: str,
-        limit: Optional[int] = None,
-        start_date: Optional[date] = None,
-        end_date: Optional[date] = None,
+    def load_all_sessions(base_path: str, limit: Optional[int] = None,
+        start_date: Optional[date] = None, end_date: Optional[date] = None
     ) -> List[SessionData]:
         """Load all sessions from the base path.
 
@@ -390,9 +376,7 @@ class FileProcessor:
                 if start_date or end_date:
                     if session_data.start_time:
                         session_date = session_data.start_time.date()
-                        if not TimeUtils.date_in_range(
-                            session_date, start_date, end_date
-                        ):
+                        if not TimeUtils.date_in_range(session_date, start_date, end_date):
                             continue
                 sessions.append(session_data)
 
@@ -428,7 +412,7 @@ class FileProcessor:
         if not session_path.exists() or not session_path.is_dir():
             return False
 
-        if not session_path.name.startswith("ses_"):
+        if not session_path.name.startswith('ses_'):
             return False
 
         json_files = FileProcessor.find_json_files(session_path)
@@ -438,7 +422,7 @@ class FileProcessor:
         # Check if at least one file has valid structure
         for json_file in json_files[:3]:  # Check first 3 files
             data = FileProcessor.load_json_file(json_file)
-            if data and ("tokens" in data or "modelID" in data):
+            if data and ('tokens' in data or 'modelID' in data):
                 return True
 
         return False
@@ -459,21 +443,21 @@ class FileProcessor:
         json_files = FileProcessor.find_json_files(session_path)
 
         stats = {
-            "session_id": session_path.name,
-            "file_count": len(json_files),
-            "first_file": None,
-            "last_file": None,
-            "total_size_bytes": 0,
+            'session_id': session_path.name,
+            'file_count': len(json_files),
+            'first_file': None,
+            'last_file': None,
+            'total_size_bytes': 0
         }
 
         if json_files:
-            stats["first_file"] = json_files[-1].name  # Oldest file
-            stats["last_file"] = json_files[0].name  # Newest file
+            stats['first_file'] = json_files[-1].name  # Oldest file
+            stats['last_file'] = json_files[0].name    # Newest file
 
             # Calculate total size
             for json_file in json_files:
                 try:
-                    stats["total_size_bytes"] += json_file.stat().st_size
+                    stats['total_size_bytes'] += json_file.stat().st_size
                 except OSError:
                     pass
 

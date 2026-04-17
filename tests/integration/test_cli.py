@@ -552,6 +552,106 @@ class TestExportCommand:
 
         assert result.exit_code in [0, 2]
 
+    def test_export_daily_with_recalculate(self, mock_sessions_dir, tmp_path):
+        """Test export daily --recalculate uses recalculate param correctly."""
+        export_dir = tmp_path / "exports"
+        export_dir.mkdir()
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "export",
+                "daily",
+                str(mock_sessions_dir),
+                "--format",
+                "json",
+                "--recalculate",
+            ],
+        )
+
+        assert result.exit_code == 0, f"Export failed: {result.output}"
+
+    def test_export_weekly_with_recalculate(self, mock_sessions_dir, tmp_path):
+        """Test export weekly --recalculate uses recalculate param correctly."""
+        export_dir = tmp_path / "exports"
+        export_dir.mkdir()
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "export",
+                "weekly",
+                str(mock_sessions_dir),
+                "--format",
+                "json",
+                "--recalculate",
+            ],
+        )
+
+        assert result.exit_code == 0, f"Export failed: {result.output}"
+
+    def test_export_monthly_with_recalculate(self, mock_sessions_dir, tmp_path):
+        """Test export monthly --recalculate uses recalculate param correctly."""
+        export_dir = tmp_path / "exports"
+        export_dir.mkdir()
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "export",
+                "monthly",
+                str(mock_sessions_dir),
+                "--format",
+                "json",
+                "--recalculate",
+            ],
+        )
+
+        assert result.exit_code == 0, f"Export failed: {result.output}"
+
+    def test_export_models_with_recalculate(self, mock_sessions_dir, tmp_path):
+        """Test export models --recalculate uses recalculate param correctly."""
+        export_dir = tmp_path / "exports"
+        export_dir.mkdir()
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "export",
+                "models",
+                str(mock_sessions_dir),
+                "--format",
+                "json",
+                "--recalculate",
+            ],
+        )
+
+        assert result.exit_code == 0, f"Export failed: {result.output}"
+
+    def test_export_projects_with_recalculate(self, mock_sessions_dir, tmp_path):
+        """Test export projects --recalculate uses recalculate param correctly."""
+        export_dir = tmp_path / "exports"
+        export_dir.mkdir()
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "export",
+                "projects",
+                str(mock_sessions_dir),
+                "--format",
+                "json",
+                "--recalculate",
+            ],
+        )
+
+        assert result.exit_code == 0, f"Export failed: {result.output}"
+
 
 class TestSessionCommand:
     """Tests for single session CLI command."""

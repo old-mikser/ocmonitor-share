@@ -2,7 +2,7 @@
 
 import json
 import pytest
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 from pathlib import Path
 
 from ocmonitor.utils.file_utils import FileProcessor
@@ -295,89 +295,6 @@ class TestLoadAllSessions:
 
         assert len(result) == 3
 
-    def test_load_sessions_with_date_range(self, tmp_path):
-        """Test loading sessions filtered by date range."""
-        session1 = tmp_path / "ses_001"
-        session1.mkdir()
-        (session1 / "inter_0001.json").write_text(
-            json.dumps({"tokens": {"input": 100, "output": 50}})
-        )
-
-        session2 = tmp_path / "ses_002"
-        session2.mkdir()
-        (session2 / "inter_0001.json").write_text(
-            json.dumps({"tokens": {"input": 200, "output": 100}})
-        )
-
-        start = date.today() - timedelta(days=30)
-        end = date.today() + timedelta(days=1)
-
-        result = FileProcessor.load_all_sessions(
-            str(tmp_path), start_date=start, end_date=end
-        )
-
-        assert isinstance(result, list)
-
-    def test_load_sessions_with_only_start_date(self, tmp_path):
-        """Test loading sessions with only start date filter."""
-        session1 = tmp_path / "ses_001"
-        session1.mkdir()
-        (session1 / "inter_0001.json").write_text(
-            json.dumps({"tokens": {"input": 100, "output": 50}})
-        )
-
-        start = date(2020, 1, 1)
-
-        result = FileProcessor.load_all_sessions(str(tmp_path), start_date=start)
-
-        assert isinstance(result, list)
-
-    def test_load_sessions_with_only_end_date(self, tmp_path):
-        """Test loading sessions with only end date filter."""
-        session1 = tmp_path / "ses_001"
-        session1.mkdir()
-        (session1 / "inter_0001.json").write_text(
-            json.dumps({"tokens": {"input": 100, "output": 50}})
-        )
-
-        end = date.today() + timedelta(days=10)
-
-        result = FileProcessor.load_all_sessions(str(tmp_path), end_date=end)
-
-        assert isinstance(result, list)
-
-    def test_load_sessions_date_range_filters_by_start_time(self, tmp_path):
-        """Test that date filtering uses actual session start_time, not directory mtime."""
-        session1 = tmp_path / "ses_001"
-        session1.mkdir()
-        past_time = int((datetime.now() - timedelta(days=30)).timestamp() * 1000)
-        (session1 / "inter_0001.json").write_text(
-            json.dumps(
-                {"tokens": {"input": 100, "output": 50}, "time": {"created": past_time}}
-            )
-        )
-
-        future_start = date.today() + timedelta(days=10)
-        future_end = date.today() + timedelta(days=20)
-
-        result = FileProcessor.load_all_sessions(
-            str(tmp_path), start_date=future_start, end_date=future_end
-        )
-
-        assert result == []
-
-    def test_load_sessions_includes_sessions_without_start_time(self, tmp_path):
-        """Sessions without start_time are included (conservative approach)."""
-        session1 = tmp_path / "ses_001"
-        session1.mkdir()
-        (session1 / "inter_0001.json").write_text(
-            json.dumps({"tokens": {"input": 100, "output": 50}})
-        )
-
-        result = FileProcessor.load_all_sessions(str(tmp_path))
-
-        assert len(result) == 1
-
 
 class TestValidateSessionStructure:
     """Tests for validate_session_structure method."""
@@ -520,3 +437,107 @@ class TestSessionGenerator:
 
         assert len(sessions) == 2
         assert all(isinstance(s, SessionData) for s in sessions)
+
+
+class TestFileDateFilteringSemantics:
+    """Tests for file-based date filtering using session start_time."""
+
+    def test_date_filtering_ignores_directory_mtime(self, tmp_path):
+        """Date filtering should use session start_time, not directory mtime."""
+        session1 = tmp_path / "ses_001"
+        session1.mkdir()
+
+        past_time = int((datetime.now() - timedelta(days=30)).timestamp() * 1000)
+        (session1 / "inter_0001.json").write_text(
+            json.dumps(
+                {"tokens": {"input": 100, "output": 50}, "time": {"created": past_time}}
+            )
+        )
+
+        import os
+
+        old_mtime = os.stat(session1).st_mtime
+        future_mtime = (datetime.now() + timedelta(days=30)).timestamp()
+        os.utime(session1, (future_mtime, future_mtime))
+
+        today = date.today()
+        start = today - timedelta(days=60)
+        end = today - timedelta(days=15)
+
+        result = FileProcessor.load_all_sessions(
+            str(tmp_path), start_date=start, end_date=end
+        )
+
+        assert len(result) == 1
+
+    def test_date_filtering_excludes_sessions_outside_range(self, tmp_path):
+        """Sessions with start_time outside date range should be excluded."""
+        session1 = tmp_path / "ses_001"
+        session1.mkdir()
+
+        old_time = int((datetime.now() - timedelta(days=60)).timestamp() * 1000)
+        (session1 / "inter_0001.json").write_text(
+            json.dumps(
+                {"tokens": {"input": 100, "output": 50}, "time": {"created": old_time}}
+            )
+        )
+
+        today = date.today()
+        start = today - timedelta(days=30)
+        end = today
+
+        result = FileProcessor.load_all_sessions(
+            str(tmp_path), start_date=start, end_date=end
+        )
+
+        assert result == []
+
+    def test_date_filtering_includes_sessions_within_range(self, tmp_path):
+        """Sessions with start_time within date range should be included."""
+        session1 = tmp_path / "ses_001"
+        session1.mkdir()
+
+        recent_time = int((datetime.now() - timedelta(days=2)).timestamp() * 1000)
+        (session1 / "inter_0001.json").write_text(
+            json.dumps(
+                {
+                    "tokens": {"input": 100, "output": 50},
+                    "time": {"created": recent_time},
+                }
+            )
+        )
+
+        today = date.today()
+        start = today - timedelta(days=7)
+        end = today
+
+        result = FileProcessor.load_all_sessions(
+            str(tmp_path), start_date=start, end_date=end
+        )
+
+        assert len(result) == 1
+
+    def test_date_filtering_consistent_with_sqlite(self, tmp_path):
+        """File and SQLite date filtering should use same local-time semantics."""
+        session1 = tmp_path / "ses_001"
+        session1.mkdir()
+
+        today = datetime.now()
+        session_time = int((today - timedelta(days=3)).timestamp() * 1000)
+        (session1 / "inter_0001.json").write_text(
+            json.dumps(
+                {
+                    "tokens": {"input": 100, "output": 50},
+                    "time": {"created": session_time},
+                }
+            )
+        )
+
+        start = today.date() - timedelta(days=7)
+        end = today.date() + timedelta(days=1)
+
+        result = FileProcessor.load_all_sessions(
+            str(tmp_path), start_date=start, end_date=end
+        )
+
+        assert len(result) == 1

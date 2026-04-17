@@ -95,10 +95,10 @@ class SQLiteProcessor:
         cache_data = tokens_data.get("cache", {})
 
         return TokenUsage(
-            input=max(0, tokens_data.get("input", 0)),
-            output=max(0, tokens_data.get("output", 0)),
-            cache_write=max(0, cache_data.get("write", 0)),
-            cache_read=max(0, cache_data.get("read", 0)),
+            input=max(0, tokens_data.get('input', 0)),
+            output=max(0, tokens_data.get('output', 0)),
+            cache_write=max(0, cache_data.get('write', 0)),
+            cache_read=max(0, cache_data.get('read', 0))
         )
 
     @staticmethod
@@ -246,11 +246,8 @@ class SQLiteProcessor:
 
     @classmethod
     def load_all_sessions(
-        cls,
-        db_path: Optional[Path] = None,
-        limit: Optional[int] = None,
-        start_date: Optional[date] = None,
-        end_date: Optional[date] = None,
+        cls, db_path: Optional[Path] = None, limit: Optional[int] = None,
+        start_date: Optional[date] = None, end_date: Optional[date] = None
     ) -> List[SessionData]:
         """Load all sessions from the SQLite database.
 
@@ -272,7 +269,7 @@ class SQLiteProcessor:
         conn = cls._get_connection(db_path)
         try:
             # Build WHERE clause for date filtering
-            where_clause = ""
+            where_clause = ''
             params: List[Any] = []
 
             if start_date is not None and end_date is not None:
@@ -280,30 +277,27 @@ class SQLiteProcessor:
                 end_dt = datetime.combine(end_date, datetime.max.time())
                 start_ms = int(start_dt.timestamp() * 1000)
                 end_ms = int(end_dt.timestamp() * 1000)
-                where_clause = "WHERE s.time_created BETWEEN ? AND ?"
+                where_clause = 'WHERE s.time_created BETWEEN ? AND ?'
                 params = [start_ms, end_ms]
             elif start_date is not None:
                 start_dt = datetime.combine(start_date, datetime.min.time())
                 start_ms = int(start_dt.timestamp() * 1000)
-                where_clause = "WHERE s.time_created >= ?"
+                where_clause = 'WHERE s.time_created >= ?'
                 params = [start_ms]
             elif end_date is not None:
                 end_dt = datetime.combine(end_date, datetime.max.time())
                 end_ms = int(end_dt.timestamp() * 1000)
-                where_clause = "WHERE s.time_created <= ?"
+                where_clause = 'WHERE s.time_created <= ?'
                 params = [end_ms]
 
             # Query all sessions with project info
-            query = (
-                """
+            query = """
                 SELECT s.*, p.worktree as project_path, p.name as project_name
                 FROM session s
                 LEFT JOIN project p ON s.project_id = p.id
                 %s
                 ORDER BY s.time_created DESC
-            """
-                % where_clause
-            )
+            """ % where_clause
 
             if limit:
                 query += " LIMIT ?"
@@ -702,37 +696,39 @@ class SQLiteProcessor:
             return stats
         finally:
             conn.close()
-
+    
     @classmethod
     def load_tool_usage_for_sessions(
-        cls, session_ids: List[str], db_path: Optional[Path] = None
+        cls,
+        session_ids: List[str],
+        db_path: Optional[Path] = None
     ) -> List[ToolUsageStats]:
         """Load tool usage statistics for the given sessions.
-
+        
         Queries the `part` table for tool entries with terminal statuses
         (completed or error) and aggregates counts by tool name.
-
+        
         Args:
             session_ids: List of session IDs to aggregate tool usage for
             db_path: Path to database (uses default if not provided)
-
+            
         Returns:
             List of ToolUsageStats sorted by total_calls descending
         """
         if not session_ids:
             return []
-
+        
         if db_path is None:
             db_path = cls.find_database_path()
-
+        
         if not db_path or not db_path.exists():
             return []
-
+        
         conn = cls._get_connection(db_path)
         try:
             # Build placeholders for IN clause
-            placeholders = ",".join("?" * len(session_ids))
-
+            placeholders = ','.join('?' * len(session_ids))
+            
             # Query tool parts with terminal statuses
             # Use json_valid to protect against malformed JSON
             # Use json_extract to access nested fields in the data column
@@ -749,73 +745,73 @@ class SQLiteProcessor:
                   AND json_extract(data, '$.state.status') IN ('completed', 'error')
                 GROUP BY tool_name, status
             """
-
+            
             cursor = conn.execute(query, session_ids)
-
+            
             # Aggregate by tool name
             tool_data: Dict[str, Dict[str, int]] = {}
             for row in cursor:
-                tool_name = row["tool_name"]
-                status = row["status"]
-                count = row["count"]
-
+                tool_name = row['tool_name']
+                status = row['status']
+                count = row['count']
+                
                 if tool_name not in tool_data:
-                    tool_data[tool_name] = {"success": 0, "failure": 0}
-
-                if status == "completed":
-                    tool_data[tool_name]["success"] += count
-                elif status == "error":
-                    tool_data[tool_name]["failure"] += count
-
+                    tool_data[tool_name] = {'success': 0, 'failure': 0}
+                
+                if status == 'completed':
+                    tool_data[tool_name]['success'] += count
+                elif status == 'error':
+                    tool_data[tool_name]['failure'] += count
+            
             # Build ToolUsageStats list
             stats = []
             for tool_name, counts in tool_data.items():
-                total = counts["success"] + counts["failure"]
-                stats.append(
-                    ToolUsageStats(
-                        tool_name=tool_name,
-                        total_calls=total,
-                        success_count=counts["success"],
-                        failure_count=counts["failure"],
-                    )
-                )
-
+                total = counts['success'] + counts['failure']
+                stats.append(ToolUsageStats(
+                    tool_name=tool_name,
+                    total_calls=total,
+                    success_count=counts['success'],
+                    failure_count=counts['failure']
+                ))
+            
             # Sort by total_calls descending
             stats.sort(key=lambda s: s.total_calls, reverse=True)
-
+            
             return stats
         finally:
             conn.close()
 
     @classmethod
     def load_tool_usage_by_model_for_sessions(
-        cls, session_ids: List[str], db_path: Optional[Path] = None
+        cls,
+        session_ids: List[str],
+        db_path: Optional[Path] = None
     ) -> List[ModelToolUsage]:
         """Load tool usage statistics grouped by model for the given sessions.
-
+        
         Queries the `part` table joined with `message` to get model information
         for each tool call. Aggregates counts by model and tool name.
-
+        
         Args:
             session_ids: List of session IDs to aggregate tool usage for
             db_path: Path to database (uses default if not provided)
-
+            
         Returns:
             List of ModelToolUsage sorted by total_calls descending
         """
         if not session_ids:
             return []
-
+        
         if db_path is None:
             db_path = cls.find_database_path()
-
+        
         if not db_path or not db_path.exists():
             return []
-
+        
         conn = cls._get_connection(db_path)
         try:
-            placeholders = ",".join("?" * len(session_ids))
-
+            placeholders = ','.join('?' * len(session_ids))
+            
             query = f"""
                 SELECT 
                     COALESCE(
@@ -836,44 +832,43 @@ class SQLiteProcessor:
                   AND json_extract(p.data, '$.state.status') IN ('completed', 'error')
                 GROUP BY model_id, tool_name, status
             """
-
+            
             cursor = conn.execute(query, session_ids)
-
+            
             model_data: Dict[str, Dict[str, Dict[str, int]]] = {}
             for row in cursor:
-                model_id = row["model_id"]
-                tool_name = row["tool_name"]
-                status = row["status"]
-                count = row["count"]
-
+                model_id = row['model_id']
+                tool_name = row['tool_name']
+                status = row['status']
+                count = row['count']
+                
                 if model_id not in model_data:
                     model_data[model_id] = {}
                 if tool_name not in model_data[model_id]:
-                    model_data[model_id][tool_name] = {"success": 0, "failure": 0}
-
-                if status == "completed":
-                    model_data[model_id][tool_name]["success"] += count
-                elif status == "error":
-                    model_data[model_id][tool_name]["failure"] += count
-
+                    model_data[model_id][tool_name] = {'success': 0, 'failure': 0}
+                
+                if status == 'completed':
+                    model_data[model_id][tool_name]['success'] += count
+                elif status == 'error':
+                    model_data[model_id][tool_name]['failure'] += count
+            
             result = []
             for model_name, tools in model_data.items():
                 tool_stats = []
                 for tool_name, counts in tools.items():
-                    total = counts["success"] + counts["failure"]
-                    tool_stats.append(
-                        ToolUsageStats(
-                            tool_name=tool_name,
-                            total_calls=total,
-                            success_count=counts["success"],
-                            failure_count=counts["failure"],
-                        )
-                    )
+                    total = counts['success'] + counts['failure']
+                    tool_stats.append(ToolUsageStats(
+                        tool_name=tool_name,
+                        total_calls=total,
+                        success_count=counts['success'],
+                        failure_count=counts['failure']
+                    ))
                 tool_stats.sort(key=lambda s: s.total_calls, reverse=True)
-                result.append(
-                    ModelToolUsage(model_name=model_name, tool_stats=tool_stats)
-                )
-
+                result.append(ModelToolUsage(
+                    model_name=model_name,
+                    tool_stats=tool_stats
+                ))
+            
             result.sort(key=lambda m: m.total_calls, reverse=True)
 
             return result
@@ -921,18 +916,13 @@ class SQLiteProcessor:
                 """,
                 (f"%{query.lower()}%",),
             )
-            return [
-                row["model_name"] for row in cursor if row["model_name"] != "unknown"
-            ]
+            return [row["model_name"] for row in cursor if row["model_name"] != "unknown"]
         finally:
             conn.close()
 
     @classmethod
     def get_model_detail_stats(
-        cls,
-        model_name: str,
-        pricing_data: Dict[str, Any],
-        db_path: Optional[Path] = None,
+        cls, model_name: str, pricing_data: Dict[str, Any], db_path: Optional[Path] = None
     ) -> Optional[ModelDetailStats]:
         """Get detailed statistics for a single model.
 
@@ -1006,36 +996,24 @@ class SQLiteProcessor:
             )
 
             # Calculate cost using pricing data
-            total_cost = Decimal("0.0")
+            total_cost = Decimal('0.0')
             model_pricing = pricing_data.get(model_name)
             if model_pricing:
-                price_input = getattr(model_pricing, "input", 0) or 0
-                price_output = getattr(model_pricing, "output", 0) or 0
-                price_cache_read = getattr(model_pricing, "cacheRead", 0) or 0
-                price_cache_write = getattr(model_pricing, "cacheWrite", 0) or 0
+                price_input = getattr(model_pricing, 'input', 0) or 0
+                price_output = getattr(model_pricing, 'output', 0) or 0
+                price_cache_read = getattr(model_pricing, 'cacheRead', 0) or 0
+                price_cache_write = getattr(model_pricing, 'cacheWrite', 0) or 0
                 total_cost = (
-                    Decimal(str(tokens.input))
-                    * Decimal(str(price_input))
-                    / Decimal("1000000")
-                    + Decimal(str(tokens.output))
-                    * Decimal(str(price_output))
-                    / Decimal("1000000")
-                    + Decimal(str(tokens.cache_read))
-                    * Decimal(str(price_cache_read))
-                    / Decimal("1000000")
-                    + Decimal(str(tokens.cache_write))
-                    * Decimal(str(price_cache_write))
-                    / Decimal("1000000")
+                    Decimal(str(tokens.input)) * Decimal(str(price_input)) / Decimal('1000000')
+                    + Decimal(str(tokens.output)) * Decimal(str(price_output)) / Decimal('1000000')
+                    + Decimal(str(tokens.cache_read)) * Decimal(str(price_cache_read)) / Decimal('1000000')
+                    + Decimal(str(tokens.cache_write)) * Decimal(str(price_cache_write)) / Decimal('1000000')
                 )
 
             total_sessions = row["total_sessions"]
             total_days = row["total_days"]
-            avg_cost_per_day = (
-                total_cost / total_days if total_days > 0 else Decimal("0.0")
-            )
-            avg_cost_per_session = (
-                total_cost / total_sessions if total_sessions > 0 else Decimal("0.0")
-            )
+            avg_cost_per_day = total_cost / total_days if total_days > 0 else Decimal('0.0')
+            avg_cost_per_session = total_cost / total_sessions if total_sessions > 0 else Decimal('0.0')
 
             # Query 2: Per-interaction output rates for p50 calculation
             rate_cursor = conn.execute(
@@ -1103,14 +1081,12 @@ class SQLiteProcessor:
 
             tool_stats = []
             for tool_row in tool_cursor:
-                tool_stats.append(
-                    ToolUsageStats(
-                        tool_name=tool_row["tool_name"],
-                        total_calls=tool_row["total_calls"],
-                        success_count=tool_row["success"],
-                        failure_count=tool_row["failed"],
-                    )
-                )
+                tool_stats.append(ToolUsageStats(
+                    tool_name=tool_row["tool_name"],
+                    total_calls=tool_row["total_calls"],
+                    success_count=tool_row["success"],
+                    failure_count=tool_row["failed"],
+                ))
 
             tool_summary = ToolUsageSummary(tool_stats=tool_stats)
 
